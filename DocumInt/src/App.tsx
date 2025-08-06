@@ -16,6 +16,7 @@ import {
   Copy,
   X
 } from 'lucide-react';
+import logo from "./assets/logo.png";
 
 const DocumentViewer = () => {
   const [activeToolbar, setActiveToolbar] = useState(null);
@@ -192,14 +193,14 @@ const DocumentViewer = () => {
 
       {/* Expandable Tool Sidebar */}
       {activeToolbar && (
-        <div className="w-80 bg-white border-r border-gray-200 shadow-lg">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-800">
+        <div className="w-80 bg-gray-800 border-r border-gray-700 shadow-lg">
+          <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">
               {toolbarOptions.find(t => t.id === activeToolbar)?.title} Tools
             </h3>
             <button
               onClick={() => setActiveToolbar(null)}
-              className="p-1 text-gray-400 hover:text-gray-600 rounded"
+              className="p-1 text-gray-400 hover:text-gray-200 rounded"
             >
               <X size={16} />
             </button>
@@ -211,12 +212,12 @@ const DocumentViewer = () => {
                 ?.actions.map(action => (
                 <button
                   key={action.id}
-                  className="w-full flex items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="w-full flex items-center p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
                 >
-                  <div className="text-blue-600 mr-4">{action.icon}</div>
+                  <div className="text-blue-400 mr-4">{action.icon}</div>
                   <div className="flex-1 text-left">
-                    <div className="font-medium text-gray-800">{action.title}</div>
-                    <div className="text-sm text-gray-600">{action.desc}</div>
+                    <div className="font-medium text-white">{action.title}</div>
+                    <div className="text-sm text-gray-300">{action.desc}</div>
                   </div>
                 </button>
               ))}
@@ -237,30 +238,7 @@ const DocumentViewer = () => {
       </div>
 
       {/* Center - PDF Viewer */}
-      <div className="flex-1 flex flex-col bg-white">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <FileText size={20} className="text-gray-600" />
-            <h1 className="text-xl font-semibold text-gray-800">Research Paper - Analysis.pdf</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-500">Page {currentPage} of 30</span>
-            <div className="flex space-x-2">
-              <button 
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                className="px-3 py-1 text-sm bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-              >
-                Previous
-              </button>
-              <button 
-                onClick={() => setCurrentPage(Math.min(30, currentPage + 1))}
-                className="px-3 py-1 text-sm bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
+      <div className="flex-1 flex flex-col bg-white">    
 
         <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
           <div className="max-w-4xl mx-auto">
