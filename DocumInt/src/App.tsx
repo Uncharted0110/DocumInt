@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { 
   ChevronDown, 
   ChevronRight, 
+  Send,
   FileText, 
   Plus, 
   Trash2, 
@@ -11,24 +12,26 @@ import {
   RefreshCw,
   Brain,
   Zap,
-  Send,
   Eye,
   Copy,
-  X
+  Settings,
+  Share2,
+  Bookmark,
+  Search
 } from 'lucide-react';
-import logo from "./assets/logo.png";
+import ToolBar from './components/ToolBar';
 
 const DocumentViewer = () => {
-  const [activeToolbar, setActiveToolbar] = useState(null);
+  const [activeToolbar, setActiveToolbar] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState('1');
   const [expandedSections, setExpandedSections] = useState(['1', '2']);
-  const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState('quick');
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState([
     { type: 'bot', message: 'Hello! I can help you analyze this document. What would you like to know?' }
   ]);
 
+  // Initialize toolbar configuration and action handlers
   const toolbarOptions = [
     {
       id: 'pdf',
@@ -70,8 +73,43 @@ const DocumentViewer = () => {
         { id: 'key-points', icon: <Eye size={18} />, title: 'Key Points', desc: 'Extract main points' },
         { id: 'export-summary', icon: <Download size={18} />, title: 'Export Summary', desc: 'Save summary as document' }
       ]
+    },
+    {
+      id: 'search',
+      title: 'Search',
+      icon: <Search size={20} />,
+      actions: [
+        { id: 'full-text-search', icon: <Search size={18} />, title: 'Full Text Search', desc: 'Search through entire document' },
+        { id: 'semantic-search', icon: <Brain size={18} />, title: 'Semantic Search', desc: 'AI-powered content search' },
+        { id: 'bookmarks', icon: <Bookmark size={18} />, title: 'Bookmarks', desc: 'Manage document bookmarks' }
+      ]
+    },
+    {
+      id: 'sharing',
+      title: 'Share',
+      icon: <Share2 size={20} />,
+      actions: [
+        { id: 'share-link', icon: <Share2 size={18} />, title: 'Share Link', desc: 'Generate shareable link' },
+        { id: 'export-share', icon: <Download size={18} />, title: 'Export & Share', desc: 'Export and share document' },
+        { id: 'collaborate', icon: <Eye size={18} />, title: 'Collaborate', desc: 'Enable collaborative editing' }
+      ]
+    },
+    {
+      id: 'settings',
+      title: 'Settings',
+      icon: <Settings size={20} />,
+      actions: [
+        { id: 'preferences', icon: <Settings size={18} />, title: 'Preferences', desc: 'Configure app settings' },
+        { id: 'themes', icon: <Eye size={18} />, title: 'Themes', desc: 'Change app appearance' },
+        { id: 'shortcuts', icon: <Plus size={18} />, title: 'Shortcuts', desc: 'View keyboard shortcuts' }
+      ]
     }
   ];
+
+  const handleActionClick = (actionId: string, toolId: string) => {
+    console.log(`Action ${actionId} clicked for tool ${toolId}`);
+    // Add your action handlers here
+  };
 
   const documentOutline = [
     {
@@ -106,11 +144,11 @@ const DocumentViewer = () => {
     }
   ];
 
-  const toggleToolbar = (toolId) => {
+  const toggleToolbar = (toolId: string) => {
     setActiveToolbar(activeToolbar === toolId ? null : toolId);
   };
 
-  const toggleSection = (sectionId) => {
+  const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => 
       prev.includes(sectionId) 
         ? prev.filter(id => id !== sectionId)
@@ -133,7 +171,14 @@ const DocumentViewer = () => {
     }
   };
 
-  const renderOutlineItem = (item) => {
+  interface OutlineItem {
+    id: string;
+    title: string;
+    level: number;
+    children?: OutlineItem[];
+  }
+
+  const renderOutlineItem = (item: OutlineItem) => {
     const isExpanded = expandedSections.includes(item.id);
     const isSelected = selectedSection === item.id;
     const hasChildren = item.children && item.children.length > 0;
@@ -164,7 +209,7 @@ const DocumentViewer = () => {
         </div>
         {hasChildren && isExpanded && (
           <div className="ml-2">
-            {item.children.map(child => renderOutlineItem(child))}
+            {item.children && item.children.map(child => renderOutlineItem(child))}
           </div>
         )}
       </div>
@@ -173,58 +218,14 @@ const DocumentViewer = () => {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Minimized Toolbar - Far Left */}
-      <div className="w-16 bg-gray-800 flex flex-col items-center py-4 space-y-2">
-        {toolbarOptions.map(tool => (
-          <button
-            key={tool.id}
-            onClick={() => toggleToolbar(tool.id)}
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeToolbar === tool.id
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
-            title={tool.title}
-          >
-            {tool.icon}
-          </button>
-        ))}
-      </div>
-
-      {/* Expandable Tool Sidebar */}
-      {activeToolbar && (
-        <div className="w-80 bg-gray-800 border-r border-gray-700 shadow-lg">
-          <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">
-              {toolbarOptions.find(t => t.id === activeToolbar)?.title} Tools
-            </h3>
-            <button
-              onClick={() => setActiveToolbar(null)}
-              className="p-1 text-gray-400 hover:text-gray-200 rounded"
-            >
-              <X size={16} />
-            </button>
-          </div>
-          <div className="p-4">
-            <div className="space-y-3">
-              {toolbarOptions
-                .find(t => t.id === activeToolbar)
-                ?.actions.map(action => (
-                <button
-                  key={action.id}
-                  className="w-full flex items-center p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  <div className="text-blue-400 mr-4">{action.icon}</div>
-                  <div className="flex-1 text-left">
-                    <div className="font-medium text-white">{action.title}</div>
-                    <div className="text-sm text-gray-300">{action.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modular ToolBar Component */}
+      <ToolBar
+        toolbarOptions={toolbarOptions}
+        activeToolbar={activeToolbar}
+        onToggleToolbar={toggleToolbar}
+        onCloseToolbar={() => setActiveToolbar(null)}
+        onActionClick={handleActionClick}
+      />
 
       {/* Document Outline Sidebar */}
       <div className="w-72 bg-white border-r border-gray-200">
