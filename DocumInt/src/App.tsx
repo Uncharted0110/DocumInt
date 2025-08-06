@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -17,19 +17,124 @@ import {
   Settings,
   Share2,
   Bookmark,
-  Search
+  Search,
+  File,
+  AlertCircle
 } from 'lucide-react';
 import ToolBar from './components/ToolBar';
 
 const DocumentViewer = () => {
-  const [activeToolbar, setActiveToolbar] = useState<string | null>(null);
+  const [activeToolbar, setActiveToolbar] = useState(null);
   const [selectedSection, setSelectedSection] = useState('1');
   const [expandedSections, setExpandedSections] = useState(['1', '2']);
   const [activeTab, setActiveTab] = useState('quick');
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState([
-    { type: 'bot', message: 'Hello! I can help you analyze this document. What would you like to know?' }
+    { type: 'bot', message: 'Hello! Upload a PDF to get started, then I can help you analyze it!' }
   ]);
+  
+  // PDF-related state
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState('');
+  const [isAdobeLoaded, setIsAdobeLoaded] = useState(false);
+  const [pdfViewer, setPdfViewer] = useState(null);
+  const pdfViewerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef(null);
+
+  // Adobe PDF Embed API configuration
+  const ADOBE_API_KEY = import.meta.env.VITE_ADOBE_API_KEY;
+  const DEF_REDIRECT_URI = import.meta.env.VITE_ADOBE_REDIRECT_URI;
+
+  // Load Adobe PDF Embed API
+  useEffect(() => {
+    const loadAdobeAPI = () => {
+      if (window.AdobeDC) {
+        setIsAdobeLoaded(true);
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://documentservices.adobe.com/view-sdk/viewer.js';
+      script.onload = () => {
+        setIsAdobeLoaded(true);
+      };
+      script.onerror = () => {
+        console.error('Failed to load Adobe PDF Embed API');
+      };
+      document.head.appendChild(script);
+    };
+
+    loadAdobeAPI();
+  }, []);
+
+  // Initialize Adobe PDF viewer when API is loaded and PDF is available
+  useEffect(() => {
+    if (isAdobeLoaded && pdfUrl && pdfFileName) {
+      initializePDFViewer();
+    }
+  }, [isAdobeLoaded, pdfUrl, pdfFileName]);
+
+  const initializePDFViewer = () => {
+    if (!window.AdobeDC || !pdfViewerRef.current) return;
+
+    // Clear previous viewer
+    if (pdfViewer) {
+      pdfViewerRef.current.innerHTML = '';
+    }
+
+    const adobeDCView = new window.AdobeDC.View({
+      clientId: ADOBE_API_KEY,
+      divId: "adobe-dc-view"
+    });
+
+    adobeDCView.previewFile({
+      content: { location: { url: pdfUrl } },
+      metaData: { fileName: pdfFileName }
+    }, {
+      embedMode: "SIZED_CONTAINER",
+      showAnnotationTools: true,
+      showLeftHandPanel: true,
+      showBookmarks: true,
+      showThumbnails: true,
+      showDownloadPDF: true,
+      showPrintPDF: true,
+      showZoomControl: true,
+      showPageControls: true,
+      showSearchControl: true,
+      enableFormFilling: true,
+      enableRedaction: false,
+      defaultViewMode: "FIT_PAGE",
+      showDisabledSaveButton: false,
+      exitPDFViewerType: "CLOSE"
+    });
+
+    setPdfViewer(adobeDCView);
+  };
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      setPdfFile(file);
+      setPdfFileName(file.name);
+      
+      // Create object URL for the PDF
+      const url = URL.createObjectURL(file);
+      setPdfUrl(url);
+
+      // Update chat history
+      setChatHistory(prev => [...prev, 
+        { type: 'user', message: `Uploaded: ${file.name}` },
+        { type: 'bot', message: `Great! I've loaded "${file.name}". You can now ask me questions about this document.` }
+      ]);
+    } else {
+      alert('Please select a valid PDF file');
+    }
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
 
   // Initialize toolbar configuration and action handlers
   const toolbarOptions = [
@@ -40,7 +145,6 @@ const DocumentViewer = () => {
       actions: [
         { id: 'add-pdf', icon: <Plus size={18} />, title: 'Add PDF', desc: 'Upload new PDF' },
         { id: 'delete-pdf', icon: <Trash2 size={18} />, title: 'Delete PDF', desc: 'Remove current PDF' },
-        { id: 'edit-pdf', icon: <Edit3 size={18} />, title: 'Edit PDF', desc: 'Modify PDF content' },
         { id: 'download-pdf', icon: <Download size={18} />, title: 'Download PDF', desc: 'Save PDF locally' }
       ]
     },
@@ -106,49 +210,66 @@ const DocumentViewer = () => {
     }
   ];
 
-  const handleActionClick = (actionId: string, toolId: string) => {
-    console.log(`Action ${actionId} clicked for tool ${toolId}`);
-    // Add your action handlers here
+  const handleActionClick = (actionId, toolId) => {
+    switch(actionId) {
+      case 'add-pdf':
+        triggerFileUpload();
+        break;
+      case 'delete-pdf':
+        setPdfFile(null);
+        setPdfUrl(null);
+        setPdfFileName('');
+        if (pdfViewerRef.current) {
+          pdfViewerRef.current.innerHTML = '';
+        }
+        setChatHistory(prev => [...prev, 
+          { type: 'bot', message: 'PDF removed. Upload a new PDF to continue.' }
+        ]);
+        break;
+      case 'download-pdf':
+        if (pdfFile) {
+          const url = URL.createObjectURL(pdfFile);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = pdfFileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+        break;
+      default:
+        console.log(`Action ${actionId} clicked for tool ${toolId}`);
+    }
+    setActiveToolbar(null); // Close toolbar after action
   };
 
   const documentOutline = [
     {
       id: '1',
-      title: 'Introduction',
-      level: 1,
-      children: [
-        { id: '1.1', title: 'Overview', level: 2 },
-        { id: '1.2', title: 'Objectives', level: 2 }
-      ]
-    },
-    {
-      id: '2',
-      title: 'Methodology',
-      level: 1,
-      children: [
-        { id: '2.1', title: 'Data Collection', level: 2 },
-        { id: '2.2', title: 'Analysis Framework', level: 2 }
-      ]
-    },
-    {
-      id: '3',
-      title: 'Results',
+      title: 'Page 1',
       level: 1,
       children: []
     },
     {
-      id: '4',
-      title: 'Conclusion',
+      id: '2',
+      title: 'Page 2',
+      level: 1,
+      children: []
+    },
+    {
+      id: '3',
+      title: 'Page 3',
       level: 1,
       children: []
     }
   ];
 
-  const toggleToolbar = (toolId: string) => {
+  const toggleToolbar = (toolId) => {
     setActiveToolbar(activeToolbar === toolId ? null : toolId);
   };
 
-  const toggleSection = (sectionId: string) => {
+  const toggleSection = (sectionId) => {
     setExpandedSections(prev => 
       prev.includes(sectionId) 
         ? prev.filter(id => id !== sectionId)
@@ -159,26 +280,28 @@ const DocumentViewer = () => {
   const handleSendMessage = () => {
     if (chatMessage.trim()) {
       const newUserMessage = { type: 'user', message: chatMessage };
-      const botResponse = { 
-        type: 'bot', 
-        message: activeTab === 'quick' 
-          ? `Quick answer: ${chatMessage.includes('summary') ? 'This document covers methodology and results analysis.' : 'I can help you with that specific query.'}`
-          : `Detailed analysis: Based on the document content, ${chatMessage.toLowerCase().includes('what') ? 'this appears to be a research paper discussing various methodological approaches and their outcomes.' : 'I can provide comprehensive insights about this topic.'}`
-      };
+      let botResponse;
+      
+      if (!pdfFile) {
+        botResponse = { 
+          type: 'bot', 
+          message: 'Please upload a PDF first so I can analyze it for you!'
+        };
+      } else {
+        botResponse = { 
+          type: 'bot', 
+          message: activeTab === 'quick' 
+            ? `Quick answer about "${pdfFileName}": ${chatMessage.includes('summary') ? 'I can see your document is loaded. For a complete analysis, I would need to process the content.' : 'I can help you with that specific query about your document.'}`
+            : `Detailed analysis of "${pdfFileName}": ${chatMessage.toLowerCase().includes('what') ? 'This appears to be your uploaded PDF document. I can provide comprehensive insights once integrated with content analysis.' : 'I can provide detailed insights about this document.'}`
+        };
+      }
       
       setChatHistory(prev => [...prev, newUserMessage, botResponse]);
       setChatMessage('');
     }
   };
 
-  interface OutlineItem {
-    id: string;
-    title: string;
-    level: number;
-    children?: OutlineItem[];
-  }
-
-  const renderOutlineItem = (item: OutlineItem) => {
+  const renderOutlineItem = (item) => {
     const isExpanded = expandedSections.includes(item.id);
     const isSelected = selectedSection === item.id;
     const hasChildren = item.children && item.children.length > 0;
@@ -204,7 +327,7 @@ const DocumentViewer = () => {
           )}
           {!hasChildren && <div className="w-6" />}
           <span className={`text-sm ${item.level === 2 ? 'ml-4' : ''}`}>
-            {item.id} {item.title}
+            {item.title}
           </span>
         </div>
         {hasChildren && isExpanded && (
@@ -218,6 +341,15 @@ const DocumentViewer = () => {
 
   return (
     <div className="flex h-screen bg-gray-50">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf"
+        onChange={handleFileUpload}
+        style={{ display: 'none' }}
+      />
+
       {/* Modular ToolBar Component */}
       <ToolBar
         toolbarOptions={toolbarOptions}
@@ -230,55 +362,63 @@ const DocumentViewer = () => {
       {/* Document Outline Sidebar */}
       <div className="w-72 bg-white border-r border-gray-200">
         <div className="p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-800">Document Outline</h3>
-          <p className="text-sm text-gray-600 mt-1">Research Paper - Analysis.pdf</p>
+          <h3 className="text-lg font-semibold text-gray-800">Document</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            {pdfFileName || 'No PDF loaded'}
+          </p>
+          {!pdfFile && (
+            <button
+              onClick={triggerFileUpload}
+              className="mt-2 flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+            >
+              <Upload size={14} className="mr-1" />
+              Upload PDF
+            </button>
+          )}
         </div>
         <div className="flex-1 p-3 overflow-y-auto max-h-screen">
-          {documentOutline.map(item => renderOutlineItem(item))}
+          {pdfFile ? (
+            documentOutline.map(item => renderOutlineItem(item))
+          ) : (
+            <div className="text-center text-gray-500 mt-8">
+              <File size={48} className="mx-auto mb-4 text-gray-300" />
+              <p className="text-sm">Upload a PDF to see document structure</p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Center - PDF Viewer */}
-      <div className="flex-1 flex flex-col bg-white">    
-
-        <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-lg border border-gray-300 p-12 min-h-[800px]">
-              <div className="text-center mb-8">
-                <h1 className="text-3xl font-bold text-gray-800 mb-4">Research Analysis Report</h1>
-                <p className="text-gray-600">A Comprehensive Study on Modern Methodologies</p>
-              </div>
-
-              <div className="prose prose-lg max-w-none">
-                <h2 className="text-2xl font-semibold text-gray-800 mb-4">
-                  {documentOutline
-                    .flatMap(item => [item, ...(item.children || [])])
-                    .find(item => item.id === selectedSection)?.title}
-                </h2>
-                
-                <p className="text-gray-700 leading-relaxed mb-6">
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                </p>
-
-                <p className="text-gray-700 leading-relaxed mb-6">
-                  Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-                </p>
-
-                <div className="bg-gray-50 p-6 rounded-lg mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Key Findings</h3>
-                  <ul className="text-gray-700 space-y-2">
-                    <li>• Methodology shows 85% accuracy in results</li>
-                    <li>• Data collection spans over 12 months</li>
-                    <li>• Analysis framework provides robust insights</li>
-                  </ul>
-                </div>
-
-                <p className="text-gray-700 leading-relaxed">
-                  Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
-                </p>
+      <div className="flex-1 flex flex-col bg-white">
+        <div className="flex-1 overflow-hidden">
+          {pdfFile ? (
+            <div 
+              id="adobe-dc-view"
+              ref={pdfViewerRef}
+              className="w-full h-full"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full bg-gray-50">
+              <div className="text-center">
+                <File size={64} className="mx-auto mb-4 text-gray-300" />
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">No PDF Loaded</h3>
+                <p className="text-gray-500 mb-6">Upload a PDF file to start viewing and analyzing</p>
+                <button
+                  onClick={triggerFileUpload}
+                  className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mx-auto"
+                >
+                  <Upload size={20} className="mr-2" />
+                  Choose PDF File
+                </button>
+                {!isAdobeLoaded && (
+                  <div className="mt-4 flex items-center justify-center text-yellow-600">
+                    <AlertCircle size={16} className="mr-1" />
+                    <span className="text-sm">Loading Adobe PDF viewer...</span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -333,18 +473,31 @@ const DocumentViewer = () => {
               value={chatMessage}
               onChange={(e) => setChatMessage(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder={activeTab === 'quick' ? "Ask a quick question..." : "Ask for detailed analysis..."}
+              placeholder={
+                !pdfFile 
+                  ? "Upload a PDF first..." 
+                  : activeTab === 'quick' 
+                    ? "Ask a quick question..." 
+                    : "Ask for detailed analysis..."
+              }
               className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!pdfFile}
             />
             <button
               onClick={handleSendMessage}
-              className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!pdfFile || !chatMessage.trim()}
+              className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send size={16} />
             </button>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            {activeTab === 'quick' ? 'Get instant answers' : 'Get comprehensive analysis'}
+            {!pdfFile 
+              ? 'Upload a PDF to start chatting' 
+              : activeTab === 'quick' 
+                ? 'Get instant answers' 
+                : 'Get comprehensive analysis'
+            }
           </p>
         </div>
       </div>

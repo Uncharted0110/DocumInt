@@ -42,7 +42,7 @@ const ToolBar: React.FC<ToolBarProps> = ({
             onClick={() => onToggleToolbar(tool.id)}
             className={`p-3 rounded-lg transition-all duration-200 ${
               activeToolbar === tool.id
-                ? 'text-orange-500 bg-slate-50 shadow-lg border-2 border-black'
+                ? 'text-orange-500 bg-slate-50 shadow-lg border-1 border-black'
                 : 'text-slate-600 hover:text-slate-50 hover:bg-orange-500'
             }`}
             title={tool.title}
