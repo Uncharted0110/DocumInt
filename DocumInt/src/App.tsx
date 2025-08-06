@@ -23,29 +23,34 @@ import {
 } from 'lucide-react';
 import ToolBar from './components/ToolBar';
 
+// Extend window type to include AdobeDC
+declare global {
+  interface Window {
+    AdobeDC?: any;
+  }
+}
+
 const DocumentViewer = () => {
-  const [activeToolbar, setActiveToolbar] = useState(null);
+  const [activeToolbar, setActiveToolbar] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState('1');
   const [expandedSections, setExpandedSections] = useState(['1', '2']);
   const [activeTab, setActiveTab] = useState('quick');
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState([
-    { type: 'bot', message: 'Hello! Upload a PDF to get started, then I can help you analyze it!' }
+    { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload a PDF to get started, then I can help you analyze it!' }
   ]);
   
   // PDF-related state
-  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfFileName, setPdfFileName] = useState('');
   const [isAdobeLoaded, setIsAdobeLoaded] = useState(false);
   const [pdfViewer, setPdfViewer] = useState(null);
   const pdfViewerRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Adobe PDF Embed API configuration
   const ADOBE_API_KEY = import.meta.env.VITE_ADOBE_API_KEY;
-  const DEF_REDIRECT_URI = import.meta.env.VITE_ADOBE_REDIRECT_URI;
-
   // Load Adobe PDF Embed API
   useEffect(() => {
     const loadAdobeAPI = () => {
@@ -112,8 +117,13 @@ const DocumentViewer = () => {
     setPdfViewer(adobeDCView);
   };
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      alert('Please select a valid PDF file');
+      return;
+    }
+    const file = files[0];
     if (file && file.type === 'application/pdf') {
       setPdfFile(file);
       setPdfFileName(file.name);
@@ -124,8 +134,8 @@ const DocumentViewer = () => {
 
       // Update chat history
       setChatHistory(prev => [...prev, 
-        { type: 'user', message: `Uploaded: ${file.name}` },
-        { type: 'bot', message: `Great! I've loaded "${file.name}". You can now ask me questions about this document.` }
+        { id: crypto.randomUUID(), type: 'user', message: `Uploaded: ${file.name}` },
+        { id: crypto.randomUUID(), type: 'bot', message: `Great! I've loaded "${file.name}". You can now ask me questions about this document.` }
       ]);
     } else {
       alert('Please select a valid PDF file');
@@ -210,7 +220,7 @@ const DocumentViewer = () => {
     }
   ];
 
-  const handleActionClick = (actionId, toolId) => {
+  const handleActionClick = (actionId: string, toolId: string) => {
     switch(actionId) {
       case 'add-pdf':
         triggerFileUpload();
@@ -223,7 +233,7 @@ const DocumentViewer = () => {
           pdfViewerRef.current.innerHTML = '';
         }
         setChatHistory(prev => [...prev, 
-          { type: 'bot', message: 'PDF removed. Upload a new PDF to continue.' }
+          { id: crypto.randomUUID(), type: 'bot', message: 'PDF removed. Upload a new PDF to continue.' }
         ]);
         break;
       case 'download-pdf':
@@ -265,11 +275,11 @@ const DocumentViewer = () => {
     }
   ];
 
-  const toggleToolbar = (toolId) => {
+  const toggleToolbar = (toolId: string) => {
     setActiveToolbar(activeToolbar === toolId ? null : toolId);
   };
 
-  const toggleSection = (sectionId) => {
+  const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => 
       prev.includes(sectionId) 
         ? prev.filter(id => id !== sectionId)
@@ -279,20 +289,30 @@ const DocumentViewer = () => {
 
   const handleSendMessage = () => {
     if (chatMessage.trim()) {
-      const newUserMessage = { type: 'user', message: chatMessage };
+      const newUserMessage = { id: crypto.randomUUID(), type: 'user', message: chatMessage };
       let botResponse;
       
       if (!pdfFile) {
         botResponse = { 
+          id: crypto.randomUUID(),
           type: 'bot', 
           message: 'Please upload a PDF first so I can analyze it for you!'
         };
       } else {
         botResponse = { 
+          id: crypto.randomUUID(),
           type: 'bot', 
-          message: activeTab === 'quick' 
-            ? `Quick answer about "${pdfFileName}": ${chatMessage.includes('summary') ? 'I can see your document is loaded. For a complete analysis, I would need to process the content.' : 'I can help you with that specific query about your document.'}`
-            : `Detailed analysis of "${pdfFileName}": ${chatMessage.toLowerCase().includes('what') ? 'This appears to be your uploaded PDF document. I can provide comprehensive insights once integrated with content analysis.' : 'I can provide detailed insights about this document.'}`
+          message: (() => {
+            let quickAnswer = chatMessage.includes('summary')
+              ? 'I can see your document is loaded. For a complete analysis, I would need to process the content.'
+              : 'I can help you with that specific query about your document.';
+            let detailedAnswer = chatMessage.toLowerCase().includes('what')
+              ? 'This appears to be your uploaded PDF document. I can provide comprehensive insights once integrated with content analysis.'
+              : 'I can provide detailed insights about this document.';
+            return activeTab === 'quick'
+              ? `Quick answer about "${pdfFileName}": ${quickAnswer}`
+              : `Detailed analysis of "${pdfFileName}": ${detailedAnswer}`;
+          })()
         };
       }
       
@@ -301,18 +321,20 @@ const DocumentViewer = () => {
     }
   };
 
-  const renderOutlineItem = (item) => {
+  const renderOutlineItem = (item: { id: string; title: string; level: number; children: any[] }) => {
     const isExpanded = expandedSections.includes(item.id);
     const isSelected = selectedSection === item.id;
     const hasChildren = item.children && item.children.length > 0;
 
     return (
       <div key={item.id} className="mb-1">
-        <div 
-          className={`flex items-center p-2 rounded cursor-pointer hover:bg-gray-100 ${
+        <button
+          className={`flex items-center w-full p-2 rounded cursor-pointer hover:bg-gray-100 ${
             isSelected ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
           }`}
           onClick={() => setSelectedSection(item.id)}
+          aria-pressed={isSelected}
+          type="button"
         >
           {hasChildren && (
             <button
@@ -321,6 +343,8 @@ const DocumentViewer = () => {
                 toggleSection(item.id);
               }}
               className="mr-2 p-1 hover:bg-gray-200 rounded"
+              aria-expanded={isExpanded}
+              type="button"
             >
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
@@ -329,10 +353,10 @@ const DocumentViewer = () => {
           <span className={`text-sm ${item.level === 2 ? 'ml-4' : ''}`}>
             {item.title}
           </span>
-        </div>
+        </button>
         {hasChildren && isExpanded && (
           <div className="ml-2">
-            {item.children && item.children.map(child => renderOutlineItem(child))}
+            {item.children?.map(child => renderOutlineItem(child))}
           </div>
         )}
       </div>
@@ -448,12 +472,10 @@ const DocumentViewer = () => {
               Detailed
             </button>
           </div>
-        </div>
-
         {/* Chat Messages */}
         <div className="flex-1 p-4 overflow-y-auto space-y-4">
-          {chatHistory.map((chat, index) => (
-            <div key={index} className={`flex ${chat.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+          {chatHistory.map((chat) => (
+            <div key={chat.id} className={`flex ${chat.type === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-xs p-3 rounded-lg ${
                 chat.type === 'user'
                   ? 'bg-blue-600 text-white'
@@ -464,6 +486,7 @@ const DocumentViewer = () => {
             </div>
           ))}
         </div>
+        </div>
 
         {/* Chat Input */}
         <div className="p-4 border-t border-gray-200">
@@ -472,7 +495,7 @@ const DocumentViewer = () => {
               type="text"
               value={chatMessage}
               onChange={(e) => setChatMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               placeholder={
                 !pdfFile 
                   ? "Upload a PDF first..." 
