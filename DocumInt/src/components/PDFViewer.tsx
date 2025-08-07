@@ -54,7 +54,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       showSearchControl: true,
       enableFormFilling: true,
       enableRedaction: false,
-      defaultViewMode: "FIT_HEIGHT", // fit heights
+      defaultViewMode: "FIT_WIDTH", // fit heights
       showDisabledSaveButton: false,
       exitPDFViewerType: "CLOSE"
     });

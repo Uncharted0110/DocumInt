@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Book, Settings } from 'lucide-react';
-import NewProjectForm from './components/NewProjectForm';
+import NewProjectForm from '../components/NewProjectForm';
 
 const App = () => {
   const navigate = useNavigate();

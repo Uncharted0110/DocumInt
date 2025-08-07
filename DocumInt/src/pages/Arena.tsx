@@ -4,10 +4,10 @@ import {
     Brain, Zap, Eye, Copy, Settings, Share2, Bookmark, Search, File
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import ToolBar from './components/ToolBar';
-import PDFViewer from './components/PDFViewer';
-import Chat from './components/Chat';
-import PDFListSidebar from './components/PDFListSidebar';
+import ToolBar from '../components/ToolBar';
+import PDFViewer from '../components/PDFViewer';
+import Chat from '../components/Chat';
+import PDFListSidebar from '../components/PDFListSidebar';
 
 // Extend window type to include AdobeDC
 declare global {
