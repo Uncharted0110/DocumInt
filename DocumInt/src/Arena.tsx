@@ -60,19 +60,26 @@ const Arena = () => {
     }, []);
 
     // Initialize PDFs
+    // Replace the existing useEffect for PDF initialization
     useEffect(() => {
-        const urls = files.map(file => URL.createObjectURL(file));
-        setPdfUrls(urls);
+        if (files && files.length > 0) {
+            // Create URLs for all PDFs
+            const urls = files.map(file => URL.createObjectURL(file));
+            setPdfUrls(urls);
 
-        if (files.length > 0) {
-            setSelectedPdf(files[0]);
-            setPdfFile(files[0]);
-            setPdfFileName(files[0].name);
+            // Select and load the first PDF by default
+            const firstPdf = files[0];
+            setSelectedPdf(firstPdf);
+            setPdfFile(firstPdf);
+            setPdfFileName(firstPdf.name);
             setPdfUrl(urls[0]);
         }
 
-        return () => urls.forEach(url => URL.revokeObjectURL(url));
-    }, [files]);
+        // Cleanup function to revoke URLs on unmount
+        return () => {
+            pdfUrls.forEach(url => URL.revokeObjectURL(url));
+        };
+    }, []); // Empty dependency array to run only once on mount
 
     // Handlers
     const handlePdfSelection = (file: File) => {
@@ -85,7 +92,7 @@ const Arena = () => {
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
         if (!files?.length) return;
-        
+
         const file = files[0];
         if (file.type === 'application/pdf') {
             setPdfFile(file);
@@ -184,7 +191,7 @@ const Arena = () => {
                 activeToolbar={activeToolbar}
                 onToggleToolbar={(toolId: string) => setActiveToolbar(activeToolbar === toolId ? null : toolId)}
                 onCloseToolbar={() => setActiveToolbar(null)}
-                onActionClick={() => {}}
+                onActionClick={() => { }}
             />
 
             {/* Main Content Layout */}
@@ -213,7 +220,7 @@ const Arena = () => {
                         activeTab={activeTab}
                         pdfFile={pdfFile}
                         onMessageChange={setChatMessage}
-                        onSendMessage={() => {}}
+                        onSendMessage={() => { }}
                         onTabChange={setActiveTab}
                     />
                 </div>
