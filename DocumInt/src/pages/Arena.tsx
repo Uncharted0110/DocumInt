@@ -48,18 +48,41 @@ const Arena = () => {
         { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload a PDF to get started, then I can help you analyze it!' }
     ]);
 
+    // Loading state
+    const [isLoading, setIsLoading] = useState(true);
+
     // Load Adobe PDF Embed API
     useEffect(() => {
-        if (window.AdobeDC) {
-            setIsAdobeLoaded(true);
-            return;
-        }
+        const loadAdobeAPI = async () => {
+            setIsLoading(true);
+            
+            try {
+                if (window.AdobeDC) {
+                    setIsAdobeLoaded(true);
+                    setIsLoading(false);
+                    return;
+                }
 
-        const script = document.createElement('script');
-        script.src = 'https://documentservices.adobe.com/view-sdk/viewer.js';
-        script.onload = () => setIsAdobeLoaded(true);
-        script.onerror = () => console.error('Failed to load Adobe PDF Embed API');
-        document.head.appendChild(script);
+                const script = document.createElement('script');
+                script.src = 'https://documentservices.adobe.com/view-sdk/viewer.js';
+                
+                const loadPromise = new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = reject;
+                });
+
+                document.head.appendChild(script);
+                await loadPromise;
+                
+                setIsAdobeLoaded(true);
+            } catch (error) {
+                console.error('Failed to load Adobe PDF Embed API:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadAdobeAPI();
     }, []);
 
     // Initialize PDFs
@@ -184,70 +207,82 @@ const Arena = () => {
         }
     ];
 
+    // Update the return statement to show loading state
     return (
-        <div className="h-screen bg-gray-50 flex flex-col">
-            {/* Hidden file input */}
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                onChange={handleFileUpload}
-                style={{ display: 'none' }}
-            />
-
-            {/* Top Header Toolbar */}
-            <ToolBar
-                toolbarOptions={toolbarOptions}
-                activeToolbar={activeToolbar}
-                onToggleToolbar={(toolId: string) => setActiveToolbar(activeToolbar === toolId ? null : toolId)}
-                onCloseToolbar={() => setActiveToolbar(null)}
-                onActionClick={() => { }}
-            />
-
-            {/* Main Content Layout */}
-            <div className="flex flex-1">
-                <PDFListSidebar
-                    projectName={projectName}
-                    files={files}
-                    selectedPdf={selectedPdf}
-                    onPdfSelect={handlePdfSelection}
-                    isMinimized={isSidebarMinimized}
-                    onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
-                />
-
-                {/* PDF Content Area with Outline */}
-                <div className="flex-1 flex bg-white">
-                    <PDFOutlineSidebar
-                        pdfFile={selectedPdf}
-                        onPageNavigation={handlePageNavigation}
-                        className="w-80"
-                    />
-                    
-                    <div className="flex-1 flex flex-col">
-                        <PDFViewer
-                            pdfFile={selectedPdf}
-                            pdfUrl={pdfUrl}
-                            pdfFileName={pdfFileName}
-                            isAdobeLoaded={isAdobeLoaded}
-                            onFileUpload={() => fileInputRef.current?.click()}
-                            navigationPage={navigationPage}
-                        />
+        <>
+            {isLoading ? (
+                <div className="h-screen flex items-center justify-center bg-gray-50">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-900 mb-4"></div>
+                        <p className="text-gray-600">Loading DocumInt...</p>
                     </div>
                 </div>
-
-                <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
-                    <Chat
-                        chatHistory={chatHistory}
-                        chatMessage={chatMessage}
-                        activeTab={activeTab}
-                        pdfFile={pdfFile}
-                        onMessageChange={setChatMessage}
-                        onSendMessage={() => { }}
-                        onTabChange={setActiveTab}
+            ) : (
+                <div className="h-screen bg-gray-50 flex flex-col">
+                    {/* Hidden file input */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleFileUpload}
+                        style={{ display: 'none' }}
                     />
+
+                    {/* Top Header Toolbar */}
+                    <ToolBar
+                        toolbarOptions={toolbarOptions}
+                        activeToolbar={activeToolbar}
+                        onToggleToolbar={(toolId: string) => setActiveToolbar(activeToolbar === toolId ? null : toolId)}
+                        onCloseToolbar={() => setActiveToolbar(null)}
+                        onActionClick={() => { }}
+                    />
+
+                    {/* Main Content Layout */}
+                    <div className="flex flex-1">
+                        <PDFListSidebar
+                            projectName={projectName}
+                            files={files}
+                            selectedPdf={selectedPdf}
+                            onPdfSelect={handlePdfSelection}
+                            isMinimized={isSidebarMinimized}
+                            onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
+                        />
+
+                        {/* PDF Content Area with Outline */}
+                        <div className="flex-1 flex bg-white">
+                            <PDFOutlineSidebar
+                                pdfFile={selectedPdf}
+                                onPageNavigation={handlePageNavigation}
+                                className="w-80"
+                            />
+                            
+                            <div className="flex-1 flex flex-col">
+                                <PDFViewer
+                                    pdfFile={selectedPdf}
+                                    pdfUrl={pdfUrl}
+                                    pdfFileName={pdfFileName}
+                                    isAdobeLoaded={isAdobeLoaded}
+                                    onFileUpload={() => fileInputRef.current?.click()}
+                                    navigationPage={navigationPage}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
+                            <Chat
+                                chatHistory={chatHistory}
+                                chatMessage={chatMessage}
+                                activeTab={activeTab}
+                                pdfFile={pdfFile}
+                                onMessageChange={setChatMessage}
+                                onSendMessage={() => { }}
+                                onTabChange={setActiveTab}
+                            />
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
+            )}
+        </>
     );
 };
 
