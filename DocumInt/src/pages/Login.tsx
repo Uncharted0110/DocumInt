@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { redirect, useNavigate } from 'react-router-dom';
 import { Magic } from 'magic-sdk';
 import { OAuthExtension } from '@magic-ext/oauth';
 
@@ -12,10 +12,13 @@ const Login = () => {
         const magic = new Magic(import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY, {
             extensions: [new OAuthExtension()],
         });
+        console.log("http://localhost:5173/projects");
         await magic.oauth.loginWithRedirect({
-            provider,
-            redirectURI: window.location.origin + '/projects',
+            provider:'google',
+            redirectURI: "http://localhost:5173/projects",
+            
         });
+        
     };
 
     const handleGuest = () => {
