@@ -27,9 +27,6 @@ interface ToolBarProps {
 
 const ToolBar: React.FC<ToolBarProps> = ({
   toolbarOptions,
-  activeToolbar,
-  onToggleToolbar,
-  onCloseToolbar,
   onActionClick,
 }) => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
