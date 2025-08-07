@@ -22,6 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import ToolBar from './components/ToolBar';
+import PDFViewer from './components/PDFViewer';
 
 // Extend window type to include AdobeDC
 declare global {
@@ -251,28 +252,11 @@ const DocumentViewer = () => {
       default:
         console.log(`Action ${actionId} clicked for tool ${toolId}`);
     }
-    setActiveToolbar(null); // Close toolbar after action
+    setActiveToolbar(null); 
   };
 
   const documentOutline = [
-    {
-      id: '1',
-      title: 'Page 1',
-      level: 1,
-      children: []
-    },
-    {
-      id: '2',
-      title: 'Page 2',
-      level: 1,
-      children: []
-    },
-    {
-      id: '3',
-      title: 'Page 3',
-      level: 1,
-      children: []
-    }
+    []
   ];
 
   const toggleToolbar = (toolId: string) => {
@@ -414,36 +398,13 @@ const DocumentViewer = () => {
 
       {/* Center - PDF Viewer */}
       <div className="flex-1 flex flex-col bg-white">
-        <div className="flex-1 overflow-hidden">
-          {pdfFile ? (
-            <div 
-              id="adobe-dc-view"
-              ref={pdfViewerRef}
-              className="w-full h-full"
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full bg-gray-50">
-              <div className="text-center">
-                <File size={64} className="mx-auto mb-4 text-gray-300" />
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">No PDF Loaded</h3>
-                <p className="text-gray-500 mb-6">Upload a PDF file to start viewing and analyzing</p>
-                <button
-                  onClick={triggerFileUpload}
-                  className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mx-auto"
-                >
-                  <Upload size={20} className="mr-2" />
-                  Choose PDF File
-                </button>
-                {!isAdobeLoaded && (
-                  <div className="mt-4 flex items-center justify-center text-yellow-600">
-                    <AlertCircle size={16} className="mr-1" />
-                    <span className="text-sm">Loading Adobe PDF viewer...</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        <PDFViewer
+          pdfFile={pdfFile}
+          pdfUrl={pdfUrl}
+          pdfFileName={pdfFileName}
+          isAdobeLoaded={isAdobeLoaded}
+          onFileUpload={triggerFileUpload}
+        />
       </div>
 
       {/* Right Sidebar - Chat Interface */}
