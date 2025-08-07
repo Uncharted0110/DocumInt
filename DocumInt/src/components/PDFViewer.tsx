@@ -69,7 +69,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
           id="adobe-dc-view"
           ref={pdfViewerRef}
           className="w-full h-full"
-          style={{ height: 'calc(100vh - 32px)', minHeight: '600px', borderRadius: '16px', boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}
+          style={{ height: 'calc(93vh - 32px)', minHeight: '600px', borderRadius: '16px', boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}
         />
       ) : (
         <div className="flex items-center justify-center h-full bg-gray-50">

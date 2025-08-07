@@ -1,9 +1,16 @@
-import React from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Book, Settings } from 'lucide-react';
+import NewProjectForm from './components/NewProjectForm';
 
 const App = () => {
   const navigate = useNavigate();
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+
+  const handleCreateProject = (name: string, files: File[]) => {
+    console.log('Creating project:', { name, files });
+    navigate('/arena', { state: { projectName: name, files } });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -13,14 +20,14 @@ const App = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* New Project Card */}
           <div 
-            onClick={() => navigate('/arena')}
+            onClick={() => setShowNewProjectForm(true)}
             className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer p-6 border border-gray-200"
           >
             <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg mb-4">
               <FileText className="text-blue-600" size={24} />
             </div>
             <h2 className="text-xl font-semibold text-gray-800 mb-2">New Project</h2>
-            <p className="text-gray-600">Create a new document analysis workspace</p>
+            <p className="text-gray-600">Create a new document Arena</p>
           </div>
 
           {/* Recent Projects Card */}
@@ -42,6 +49,13 @@ const App = () => {
           </div>
         </div>
       </div>
+
+      {showNewProjectForm && (
+        <NewProjectForm
+          onClose={() => setShowNewProjectForm(false)}
+          onSubmit={handleCreateProject}
+        />
+      )}
     </div>
   );
 };
