@@ -4,11 +4,10 @@ import {
     Brain, Zap, Eye, Copy, Settings, Share2, Bookmark, Search
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import ToolBar from './components/ToolBar';
-import PDFViewer from './components/PDFViewer';
-import Chat from './components/Chat';
-import PDFListSidebar from './components/PDFListSidebar';
-import PDFOutlineSidebar from './components/PDFOutlineSidebar';
+import ToolBar from '../components/ToolBar';
+import PDFViewer from '../components/PDFViewer';
+import Chat from '../components/Chat';
+import PDFListSidebar from '../components/PDFListSidebar';
 
 // Extend window type to include AdobeDC
 declare global {
@@ -31,6 +30,7 @@ const Arena = () => {
     // UI state
     const [activeToolbar, setActiveToolbar] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('quick');
+    const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
 
     // PDF state
     const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
@@ -210,6 +210,8 @@ const Arena = () => {
                     files={files}
                     selectedPdf={selectedPdf}
                     onPdfSelect={handlePdfSelection}
+                    isMinimized={isSidebarMinimized}
+                    onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
                 />
 
                 {/* PDF Content Area with Outline */}

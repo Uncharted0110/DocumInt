@@ -88,7 +88,7 @@ const { navigateToPage } = useAdobePDFNavigation({
       showSearchControl: true,
       enableFormFilling: true,
       enableRedaction: false,
-      defaultViewMode: "FIT_HEIGHT",
+      defaultViewMode: "FIT_WIDTH", // fit heights
       showDisabledSaveButton: false,
       exitPDFViewerType: "CLOSE"
     };

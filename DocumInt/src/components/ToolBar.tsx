@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import logo from "../assets/logo.png";
+import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
+import logo from "../assets/horizontalLogo.png";
 
 export interface ToolbarAction {
   id: string;
@@ -40,7 +40,6 @@ const ToolBar: React.FC<ToolBarProps> = ({
       {/* Logo */}
       <div className="flex items-center mr-8">
         <img src={logo} alt="DocumInt Logo" className="h-12 w-auto" />
-        <span className="ml-2 text-xl font-bold text-orange-600">DocumInt</span>
       </div>
       {/* Toolbar Options */}
       <nav className="flex items-center space-x-4">
@@ -48,18 +47,18 @@ const ToolBar: React.FC<ToolBarProps> = ({
           <div key={tool.id} className="relative">
             {tool.actions.length > 1 ? (
               <button
-                className="flex items-center px-4 py-2 rounded hover:bg-orange-100 text-slate-700 font-medium transition-colors"
+                className="flex items-center px-4 py-2 rounded hover:bg-[#0a1653]/10 text-slate-700 font-medium transition-colors"
                 onClick={() => handleDropdown(tool.id)}
               >
                 <span className="mr-2">{tool.icon}</span>
                 {tool.title}
                 <span className="ml-1">
-                  {openDropdown === tool.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  {openDropdown === tool.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </span>
               </button>
             ) : (
               <button
-                className="flex items-center px-4 py-2 rounded hover:bg-orange-100 text-slate-700 font-medium transition-colors"
+                className="flex items-center px-4 py-2 rounded hover:bg-[#0a1653]/10 text-slate-700 font-medium transition-colors"
                 onClick={() => onActionClick(tool.actions[0].id, tool.id)}
               >
                 <span className="mr-2">{tool.icon}</span>
@@ -76,9 +75,9 @@ const ToolBar: React.FC<ToolBarProps> = ({
                       onActionClick(action.id, tool.id);
                       setOpenDropdown(null);
                     }}
-                    className="w-full flex items-center px-4 py-3 hover:bg-orange-50 text-slate-700 border-b last:border-b-0 border-slate-100"
+                    className="w-full flex items-center px-4 py-3 hover:bg-[#0a1653]/5 text-slate-700 border-b last:border-b-0 border-slate-100"
                   >
-                    <span className="text-orange-500 mr-3">{action.icon}</span>
+                    <span className="text-[#0a1653] mr-3">{action.icon}</span>
                     <span className="flex-1 text-left font-medium">{action.title}</span>
                   </button>
                 ))}
