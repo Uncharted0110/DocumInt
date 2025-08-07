@@ -30,6 +30,7 @@ const Arena = () => {
     // UI state
     const [activeToolbar, setActiveToolbar] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('quick');
+    const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
 
     // PDF state
     const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
@@ -201,6 +202,8 @@ const Arena = () => {
                     files={files}
                     selectedPdf={selectedPdf}
                     onPdfSelect={handlePdfSelection}
+                    isMinimized={isSidebarMinimized}
+                    onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
                 />
 
                 <div className="flex-1 flex flex-col bg-white">
