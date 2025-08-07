@@ -8,6 +8,7 @@ import ToolBar from '../components/ToolBar';
 import PDFViewer from '../components/PDFViewer';
 import Chat from '../components/Chat';
 import PDFListSidebar from '../components/PDFListSidebar';
+import PDFOutlineSidebar from '../components/PDFOutlineSidebar';
 
 // Extend window type to include AdobeDC
 declare global {
