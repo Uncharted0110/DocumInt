@@ -232,7 +232,7 @@ const DocumentViewer = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="h-screen bg-gray-50 flex flex-col">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -242,7 +242,7 @@ const DocumentViewer = () => {
         style={{ display: 'none' }}
       />
 
-      {/* Modular ToolBar Component */}
+      {/* Top Header Toolbar */}
       <ToolBar
         toolbarOptions={toolbarOptions}
         activeToolbar={activeToolbar}
@@ -251,48 +251,51 @@ const DocumentViewer = () => {
         onActionClick={handleActionClick}
       />
 
-      {/* Document Outline Sidebar */}
-      <div className="w-72 bg-white border-r border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-800">Document</h3>
-          <p className="text-sm text-gray-600 mt-1">
-            {pdfFileName || 'No PDF loaded'}
-          </p>
+      {/* Main Content Layout */}
+      <div className="flex flex-1">
+        {/* Document Outline Sidebar */}
+        <div className="w-72 bg-white border-r border-gray-200">
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-800">Document</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              {pdfFileName || 'No PDF loaded'}
+            </p>
+          </div>
+          <div className="flex-1 p-3 overflow-y-auto max-h-screen">
+            {pdfFile ? (
+              documentOutline.map(item => renderOutlineItem(item))
+            ) : (
+              <div className="text-center text-gray-500 mt-8">
+                <File size={48} className="mx-auto mb-4 text-gray-300" />
+                <p className="text-sm">Upload a PDF to see document structure</p>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex-1 p-3 overflow-y-auto max-h-screen">
-          {pdfFile ? (
-            documentOutline.map(item => renderOutlineItem(item))
-          ) : (
-            <div className="text-center text-gray-500 mt-8">
-              <File size={48} className="mx-auto mb-4 text-gray-300" />
-              <p className="text-sm">Upload a PDF to see document structure</p>
-            </div>
-          )}
+
+        {/* Center - PDF Viewer */}
+        <div className="flex-1 flex flex-col bg-white">
+          <PDFViewer
+            pdfFile={pdfFile}
+            pdfUrl={pdfUrl}
+            pdfFileName={pdfFileName}
+            isAdobeLoaded={isAdobeLoaded}
+            onFileUpload={triggerFileUpload}
+          />
         </div>
-      </div>
 
-      {/* Center - PDF Viewer */}
-      <div className="flex-1 flex flex-col bg-white">
-        <PDFViewer
-          pdfFile={pdfFile}
-          pdfUrl={pdfUrl}
-          pdfFileName={pdfFileName}
-          isAdobeLoaded={isAdobeLoaded}
-          onFileUpload={triggerFileUpload}
-        />
-      </div>
-
-      {/* Right Sidebar - Chat Interface */}
-      <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
-        <Chat
-          chatHistory={chatHistory}
-          chatMessage={chatMessage}
-          activeTab={activeTab}
-          pdfFile={pdfFile}
-          onMessageChange={(message) => setChatMessage(message)}
-          onSendMessage={handleSendMessage}
-          onTabChange={(tab) => setActiveTab(tab)}
-        />
+        {/* Right Sidebar - Chat Interface */}
+        <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
+          <Chat
+            chatHistory={chatHistory}
+            chatMessage={chatMessage}
+            activeTab={activeTab}
+            pdfFile={pdfFile}
+            onMessageChange={(message) => setChatMessage(message)}
+            onSendMessage={handleSendMessage}
+            onTabChange={(tab) => setActiveTab(tab)}
+          />
+        </div>
       </div>
     </div>
   );

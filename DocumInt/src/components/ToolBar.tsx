@@ -1,5 +1,5 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import logo from "../assets/logo.png";
 
 export interface ToolbarAction {
@@ -32,74 +32,65 @@ const ToolBar: React.FC<ToolBarProps> = ({
   onCloseToolbar,
   onActionClick,
 }) => {
-  return (
-    <>
-      {/* Minimized Toolbar - Far Left */}
-      <div className="w-16 bg-slate-50 flex flex-col items-center py-4 space-y-2">
-        {toolbarOptions.map(tool => (
-          <button
-            key={tool.id}
-            onClick={() => onToggleToolbar(tool.id)}
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeToolbar === tool.id
-                ? 'text-orange-500 bg-slate-50 shadow-lg border-1 border-black'
-                : 'text-slate-600 hover:text-slate-50 hover:bg-orange-500'
-            }`}
-            title={tool.title}
-          >
-            {tool.icon}
-          </button>
-        ))}
-      </div>
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-      {/* Expandable Tool Sidebar */}
-      {activeToolbar && (
-        <div className="w-80 bg-slate-50 border-r border-slate-200 shadow-lg">
-          {/* Header with Logo */}
-          <div className="p-4 border-b border-slate-200">
-            <div className="flex items-center justify-left mb-4">
-              <img 
-                src={logo} 
-                alt="DocumInt Logo" 
-                className="h-20 w-24 w-auto"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-800">
-                {toolbarOptions.find(t => t.id === activeToolbar)?.title} Tools
-              </h3>
+  const handleDropdown = (toolId: string) => {
+    setOpenDropdown(openDropdown === toolId ? null : toolId);
+  };
+
+  return (
+    <header className="w-full bg-slate-50 border-b border-slate-200 shadow flex items-center px-6 py-2 z-10">
+      {/* Logo */}
+      <div className="flex items-center mr-8">
+        <img src={logo} alt="DocumInt Logo" className="h-12 w-auto" />
+        <span className="ml-2 text-xl font-bold text-orange-600">DocumInt</span>
+      </div>
+      {/* Toolbar Options */}
+      <nav className="flex items-center space-x-4">
+        {toolbarOptions.map(tool => (
+          <div key={tool.id} className="relative">
+            {tool.actions.length > 1 ? (
               <button
-                onClick={onCloseToolbar}
-                className="p-1 text-slate-500 hover:text-slate-700 rounded"
+                className="flex items-center px-4 py-2 rounded hover:bg-orange-100 text-slate-700 font-medium transition-colors"
+                onClick={() => handleDropdown(tool.id)}
               >
-                <X size={16} />
+                <span className="mr-2">{tool.icon}</span>
+                {tool.title}
+                <span className="ml-1">
+                  {openDropdown === tool.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </span>
               </button>
-            </div>
+            ) : (
+              <button
+                className="flex items-center px-4 py-2 rounded hover:bg-orange-100 text-slate-700 font-medium transition-colors"
+                onClick={() => onActionClick(tool.actions[0].id, tool.id)}
+              >
+                <span className="mr-2">{tool.icon}</span>
+                {tool.title}
+              </button>
+            )}
+            {/* Dropdown for suboptions */}
+            {tool.actions.length > 1 && openDropdown === tool.id && (
+              <div className="absolute left-0 mt-2 w-56 bg-white border border-slate-200 rounded shadow-lg z-20">
+                {tool.actions.map(action => (
+                  <button
+                    key={action.id}
+                    onClick={() => {
+                      onActionClick(action.id, tool.id);
+                      setOpenDropdown(null);
+                    }}
+                    className="w-full flex items-center px-4 py-3 hover:bg-orange-50 text-slate-700 border-b last:border-b-0 border-slate-100"
+                  >
+                    <span className="text-orange-500 mr-3">{action.icon}</span>
+                    <span className="flex-1 text-left font-medium">{action.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          
-          {/* Actions */}
-          <div className="p-4">
-            <div className="space-y-3">
-              {toolbarOptions
-                .find(t => t.id === activeToolbar)
-                ?.actions.map(action => (
-                <button
-                  key={action.id}
-                  onClick={() => onActionClick(action.id, activeToolbar)}
-                  className="w-full flex items-center p-4 bg-white rounded-lg hover:bg-orange-50 transition-colors border border-slate-200 hover:border-orange-200"
-                >
-                  <div className="text-orange-500 mr-4">{action.icon}</div>
-                  <div className="flex-1 text-left">
-                    <div className="font-medium text-slate-800">{action.title}</div>
-                    <div className="text-sm text-slate-600">{action.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+        ))}
+      </nav>
+    </header>
   );
 };
 
