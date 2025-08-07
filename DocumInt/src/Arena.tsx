@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     FileText, Plus, Trash2, Edit3, Download, Upload, RefreshCw,
-    Brain, Zap, Eye, Copy, Settings, Share2, Bookmark, Search, File
+    Brain, Zap, Eye, Copy, Settings, Share2, Bookmark, Search
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import ToolBar from './components/ToolBar';
 import PDFViewer from './components/PDFViewer';
 import Chat from './components/Chat';
 import PDFListSidebar from './components/PDFListSidebar';
+import PDFOutlineSidebar from './components/PDFOutlineSidebar';
 
 // Extend window type to include AdobeDC
 declare global {
@@ -38,6 +39,7 @@ const Arena = () => {
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [pdfFileName, setPdfFileName] = useState('');
     const [isAdobeLoaded, setIsAdobeLoaded] = useState(false);
+    const [navigationPage, setNavigationPage] = useState<number | undefined>(undefined);
 
     // Chat state
     const [chatMessage, setChatMessage] = useState('');
@@ -87,6 +89,12 @@ const Arena = () => {
         setPdfFile(file);
         setPdfFileName(file.name);
         setPdfUrl(pdfUrls[files.indexOf(file)]);
+        setNavigationPage(undefined); // Reset navigation when switching PDFs
+    };
+
+    const handlePageNavigation = (page: number) => {
+        console.log(`Arena: Received navigation request for page ${page}`);
+        setNavigationPage(page);
     };
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +106,7 @@ const Arena = () => {
             setPdfFile(file);
             setPdfFileName(file.name);
             setPdfUrl(URL.createObjectURL(file));
+            setNavigationPage(undefined); // Reset navigation for new file
         }
     };
 
@@ -203,14 +212,24 @@ const Arena = () => {
                     onPdfSelect={handlePdfSelection}
                 />
 
-                <div className="flex-1 flex flex-col bg-white">
-                    <PDFViewer
+                {/* PDF Content Area with Outline */}
+                <div className="flex-1 flex bg-white">
+                    <PDFOutlineSidebar
                         pdfFile={selectedPdf}
-                        pdfUrl={pdfUrl}
-                        pdfFileName={pdfFileName}
-                        isAdobeLoaded={isAdobeLoaded}
-                        onFileUpload={() => fileInputRef.current?.click()}
+                        onPageNavigation={handlePageNavigation}
+                        className="w-80"
                     />
+                    
+                    <div className="flex-1 flex flex-col">
+                        <PDFViewer
+                            pdfFile={selectedPdf}
+                            pdfUrl={pdfUrl}
+                            pdfFileName={pdfFileName}
+                            isAdobeLoaded={isAdobeLoaded}
+                            onFileUpload={() => fileInputRef.current?.click()}
+                            navigationPage={navigationPage}
+                        />
+                    </div>
                 </div>
 
                 <div className="w-96 bg-white border-l border-gray-200 flex flex-col">

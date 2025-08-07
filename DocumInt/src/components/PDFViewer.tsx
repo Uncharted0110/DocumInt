@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, AlertCircle, File } from 'lucide-react';
+import { useAdobePDFNavigation } from '../hooks/useAdobePDFNavigation';
 
 interface PDFViewerProps {
   pdfFile: File | null;
@@ -7,6 +8,7 @@ interface PDFViewerProps {
   pdfFileName: string;
   isAdobeLoaded: boolean;
   onFileUpload: () => void;
+  navigationPage?: number;
 }
 
 const PDFViewer: React.FC<PDFViewerProps> = ({
@@ -14,10 +16,19 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   pdfUrl,
   pdfFileName,
   isAdobeLoaded,
-  onFileUpload
+  onFileUpload,
+  navigationPage
 }) => {
   const [pdfViewer, setPdfViewer] = useState<any>(null);
+  const [isViewerReady, setIsViewerReady] = useState(false);
   const pdfViewerRef = useRef<HTMLDivElement>(null);
+  const lastNavigationPageRef = useRef<number | undefined>(undefined);
+  
+  // Use the custom navigation hook
+const { navigateToPage } = useAdobePDFNavigation({
+    pdfViewer,
+    containerRef: pdfViewerRef
+});
 
   useEffect(() => {
     if (isAdobeLoaded && pdfUrl && pdfFileName) {
@@ -25,12 +36,38 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     }
   }, [isAdobeLoaded, pdfUrl, pdfFileName]);
 
+  // Handle page navigation using the custom hook
+  useEffect(() => {
+    // Only navigate if:
+    // 1. We have a viewer
+    // 2. NavigationPage is defined and >= 0
+    // 3. It's different from the last navigation (avoid duplicate navigations)
+    if (
+      pdfViewer && 
+      isViewerReady && 
+      navigationPage !== undefined && 
+      navigationPage >= 0 && 
+      navigationPage !== lastNavigationPageRef.current
+    ) {
+      console.log(`PDFViewer: Received navigation request to page ${navigationPage + 1}`);
+      lastNavigationPageRef.current = navigationPage;
+      
+      // Small delay to ensure the viewer is fully ready
+      setTimeout(() => {
+        navigateToPage(navigationPage);
+      }, 100);
+    }
+  }, [pdfViewer, isViewerReady, navigationPage, navigateToPage]);
+
   const initializePDFViewer = () => {
     if (!window.AdobeDC || !pdfViewerRef.current) return;
 
+    console.log('Initializing Adobe PDF Viewer...');
+    
     // Clear previous viewer
     if (pdfViewer) {
       pdfViewerRef.current.innerHTML = '';
+      setIsViewerReady(false);
     }
 
     const adobeDCView = new window.AdobeDC.View({
@@ -38,11 +75,8 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       divId: "adobe-dc-view"
     });
 
-    adobeDCView.previewFile({
-      content: { location: { url: pdfUrl } },
-      metaData: { fileName: pdfFileName }
-    }, {
-      embedMode: "FULL_WINDOW", // all functionality, overlays full window
+    const previewConfig = {
+      embedMode: "FULL_WINDOW",
       showAnnotationTools: true,
       showLeftHandPanel: true,
       showBookmarks: true,
@@ -54,23 +88,68 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       showSearchControl: true,
       enableFormFilling: true,
       enableRedaction: false,
-      defaultViewMode: "FIT_HEIGHT", // fit heights
+      defaultViewMode: "FIT_HEIGHT",
       showDisabledSaveButton: false,
       exitPDFViewerType: "CLOSE"
-    });
+    };
 
+    adobeDCView.previewFile({
+      content: { location: { url: pdfUrl } },
+      metaData: { fileName: pdfFileName }
+    }, previewConfig);
+
+    // Listen for viewer ready state
+    try {
+      adobeDCView.registerCallback(
+        window.AdobeDC.View.Enum.CallbackType.EVENT_LISTENER,
+        (event: any) => {
+          console.log('Adobe Viewer Event:', event.type);
+          if (event.type === "APP_RENDERING_DONE" || event.type === "DOCUMENT_OPEN") {
+            console.log('Adobe PDF Viewer is ready for navigation');
+            setIsViewerReady(true);
+          }
+        }
+      );
+    } catch (error) {
+      console.warn('Could not register viewer events, assuming ready after delay', error);
+      // Fallback: assume ready after a delay
+      setTimeout(() => setIsViewerReady(true), 2000);
+    }
+
+    // Set up the viewer for navigation
     setPdfViewer(adobeDCView);
   };
+
+  // Reset navigation tracking when PDF changes
+  useEffect(() => {
+    lastNavigationPageRef.current = undefined;
+    setIsViewerReady(false);
+  }, [pdfFile]);
 
   return (
     <div className="flex-1 overflow-hidden">
       {pdfFile ? (
-        <div 
-          id="adobe-dc-view"
-          ref={pdfViewerRef}
-          className="w-full h-full"
-          style={{ height: 'calc(93vh - 32px)', minHeight: '600px', borderRadius: '16px', boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}
-        />
+        <div className="w-full h-full relative">
+          <div 
+            id="adobe-dc-view"
+            ref={pdfViewerRef}
+            className="w-full h-full"
+            style={{ 
+              height: 'calc(93vh - 32px)', 
+              minHeight: '600px', 
+              borderRadius: '16px', 
+              boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)', 
+              overflow: 'hidden', 
+              display: 'flex', 
+              alignItems: 'stretch' 
+            }}
+          />
+          {!isViewerReady && pdfViewer && (
+            <div className="absolute top-4 right-4 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-sm">
+              Preparing navigation...
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex items-center justify-center h-full bg-gray-50">
           <div className="text-center">
