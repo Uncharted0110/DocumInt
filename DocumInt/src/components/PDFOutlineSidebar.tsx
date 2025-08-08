@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, FileText, Hash, Book } from 'lucide-react';
+import { extractAndAnalyzePDF } from '../hooks/geminiService'
 
 interface OutlineItem {
   level: "H1" | "H2" | "H3";
