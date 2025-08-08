@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     FileText, Plus, Trash2, Edit3, Download, Upload, RefreshCw,
-    Brain, Zap, Eye, Copy, Settings, Share2, Bookmark, Search
+    Brain, Zap, Eye, Copy, Settings, Share2, Bookmark, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import ToolBar from '../components/ToolBar';
@@ -32,6 +32,7 @@ const Arena = () => {
     const [activeToolbar, setActiveToolbar] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('quick');
     const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
+    const [isOutlineVisible, setIsOutlineVisible] = useState(true);
 
     // PDF state
     const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
@@ -239,35 +240,69 @@ const Arena = () => {
 
                     {/* Main Content Layout */}
                     <div className="flex flex-1">
-                        <PDFListSidebar
-                            projectName={projectName}
-                            files={files}
-                            selectedPdf={selectedPdf}
-                            onPdfSelect={handlePdfSelection}
-                            isMinimized={isSidebarMinimized}
-                            onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
-                        />
-
-                        {/* PDF Content Area with Outline */}
-                        <div className="flex-1 flex bg-white">
-                            <PDFOutlineSidebar
-                                pdfFile={selectedPdf}
-                                onPageNavigation={handlePageNavigation}
-                                className="w-80"
+                        {/* Left Sidebars Container */}
+                        <div className="flex">
+                            {/* PDF List Sidebar */}
+                            <PDFListSidebar
+                                projectName={projectName}
+                                files={files}
+                                selectedPdf={selectedPdf}
+                                onPdfSelect={handlePdfSelection}
+                                isMinimized={isSidebarMinimized}
+                                onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
                             />
-                            
-                            <div className="flex-1 flex flex-col">
-                                <PDFViewer
-                                    pdfFile={selectedPdf}
-                                    pdfUrl={pdfUrl}
-                                    pdfFileName={pdfFileName}
-                                    isAdobeLoaded={isAdobeLoaded}
-                                    onFileUpload={() => fileInputRef.current?.click()}
-                                    navigationPage={navigationPage}
-                                />
+
+                            {/* PDF Outline Sidebar */}
+                            <div className={`border-r border-gray-200 transition-all duration-300 ease-in-out ${
+                                isOutlineVisible ? 'w-80' : 'w-0 overflow-hidden'
+                            }`}>
+                                <div className="h-full bg-gray-50 flex flex-col">
+                                    <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
+                                        <h3 className="font-semibold text-gray-700">Document Outline</h3>
+                                        <button
+                                            onClick={() => setIsOutlineVisible(false)}
+                                            className="p-1 hover:bg-gray-200 rounded-full"
+                                            title="Hide outline"
+                                        >
+                                            <ChevronLeft size={18} className="text-gray-600" />
+                                        </button>
+                                    </div>
+                                    {/* Scrollable outline content */}
+                                    <div className="flex-1 overflow-hidden">
+                                        <PDFOutlineSidebar
+                                            pdfFile={selectedPdf}
+                                            onPageNavigation={handlePageNavigation}
+                                            className="h-full overflow-y-auto"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
+                        {/* PDF Viewer with Toggle Button */}
+                        <div className="flex-1 flex flex-col bg-white relative">
+                            {/* Toggle Button for Outline - positioned at top-left of PDF viewer */}
+                            {!isOutlineVisible && (
+                                <button
+                                    onClick={() => setIsOutlineVisible(true)}
+                                    className="absolute top-4 -left-4 z-20 p-2 hover:bg-gray-100 rounded-full text-[#0a1653] bg-white shadow-lg border border-gray-200 transition-all duration-200 hover:shadow-xl"
+                                    title="Show outline"
+                                >
+                                    <ChevronRight size={20} />
+                                </button>
+                            )}
+                            
+                            <PDFViewer
+                                pdfFile={selectedPdf}
+                                pdfUrl={pdfUrl}
+                                pdfFileName={pdfFileName}
+                                isAdobeLoaded={isAdobeLoaded}
+                                onFileUpload={() => fileInputRef.current?.click()}
+                                navigationPage={navigationPage}
+                            />
+                        </div>
+
+                        {/* Chat Panel */}
                         <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
                             <Chat
                                 chatHistory={chatHistory}
