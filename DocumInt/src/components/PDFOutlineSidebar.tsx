@@ -27,7 +27,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed] = useState(false);
   const [activeItem, setActiveItem] = useState<string | null>(null);
 
   // Extract outline when PDF file changes
@@ -155,9 +155,6 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
   if (!pdfFile) {
     return (
       <div className={`bg-gray-50 border-r border-gray-200 flex flex-col ${className}`}>
-        <div className="p-4 border-b border-gray-200">
-          <h3 className="text-sm font-medium text-gray-600">Document Outline</h3>
-        </div>
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center">
             <FileText size={48} className="mx-auto mb-2 text-gray-300" />
@@ -169,26 +166,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
   }
 
   return (
-    <div className={`bg-white border-r border-gray-200 flex flex-col ${className}`}>
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-800">Document Outline</h3>
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-          </button>
-        </div>
-        {outlineData?.title && !isCollapsed && (
-          <p className="text-xs text-gray-600 mt-1 truncate" title={outlineData.title}>
-            {outlineData.title}
-          </p>
-        )}
-      </div>
-
-      {/* Content */}
+    <div className={`bg-white border-r border-gray-200 flex flex-col ${className}`}>      {/* Content */}
       {!isCollapsed && (
         <div className="flex-1 overflow-y-auto">
           {isLoading && (
