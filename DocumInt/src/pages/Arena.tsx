@@ -330,7 +330,7 @@ const Arena = () => {
 
                         {/* PDF Content Area with Outline */}
                         <div className="flex-1 flex bg-white">
-                        {selectedPdf && (
+                        {(!isSidebarMinimized && selectedPdf) && (
                             <PDFOutlineSidebar
                                 pdfFile={selectedPdf}
                                 onPageNavigation={handlePageNavigation}
