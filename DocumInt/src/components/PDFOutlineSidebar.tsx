@@ -154,7 +154,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
 
   if (!pdfFile) {
     return (
-      <div className={`bg-gray-50 border-r border-gray-200 flex flex-col ${className}`}>
+      <div className={`bg-gray-50 border-r border-gray-200 h-screen flex flex-col ${className}`}>
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center">
             <FileText size={48} className="mx-auto mb-2 text-gray-300" />
@@ -166,9 +166,10 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
   }
 
   return (
-    <div className={`bg-white border-r border-gray-200 flex flex-col ${className}`}>      {/* Content */}
+    <div className={`bg-white border-r border-gray-200 h-screen flex flex-col ${className}`}>
+      {/* Content */}
       {!isCollapsed && (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {isLoading && (
             <div className="p-4 text-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
@@ -200,7 +201,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
                             {group.children.length > 0 && (
                               <button
                                 onClick={() => toggleSection(group.h1!.text)}
-                                className="p-2 hover:bg-gray-50 flex items-center justify-center transition-colors"
+                                className="p-2 hover:bg-gray-50 flex items-center justify-center transition-colors flex-shrink-0"
                                 aria-label="Toggle section"
                               >
                                 {expandedSections.has(group.h1.text) ? 
@@ -213,17 +214,19 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
                             {/* Main navigation button */}
                             <button
                               onClick={() => handleItemClick(group.h1!.page, group.h1!.text)}
-                              className={`flex-1 flex items-center justify-between p-2 hover:bg-gray-50 text-left group transition-colors ${
+                              className={`flex-1 flex items-center justify-between p-2 hover:bg-gray-50 text-left group transition-colors min-w-0 ${
                                 activeItem === group.h1.text ? 'bg-blue-50 border-l-2 border-blue-500' : ''
                               } ${group.children.length === 0 ? 'ml-8' : ''}`}
                             >
                               <div className="flex items-center min-w-0 flex-1">
-                                {getIconForLevel(group.h1.level)}
+                                <div className="flex-shrink-0">
+                                  {getIconForLevel(group.h1.level)}
+                                </div>
                                 <span className="ml-2 text-sm font-medium text-gray-800 truncate" title={group.h1.text}>
                                   {group.h1.text}
                                 </span>
                               </div>
-                              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded flex-shrink-0 ml-2">
                                 {group.h1.page + 1}
                               </span>
                             </button>
@@ -236,17 +239,19 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
                                 <button
                                   key={`${item.text}-${item.page}-${itemIndex}`}
                                   onClick={() => handleItemClick(item.page, `${item.level}-${item.text}`)}
-                                  className={`w-full flex items-center justify-between p-1.5 hover:bg-gray-50 text-left group transition-colors ${getIndentClass(item.level)} ${
+                                  className={`w-full flex items-center justify-between p-1.5 hover:bg-gray-50 text-left group transition-colors min-w-0 ${getIndentClass(item.level)} ${
                                     activeItem === `${item.level}-${item.text}` ? 'bg-blue-50 border-r-2 border-blue-500' : ''
                                   }`}
                                 >
                                   <div className="flex items-center min-w-0 flex-1">
-                                    {getIconForLevel(item.level)}
+                                    <div className="flex-shrink-0">
+                                      {getIconForLevel(item.level)}
+                                    </div>
                                     <span className="ml-2 text-xs text-gray-700 truncate" title={item.text}>
                                       {item.text}
                                     </span>
                                   </div>
-                                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0 ml-2">
                                     {item.page + 1}
                                   </span>
                                 </button>
@@ -261,17 +266,19 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
                         <button
                           key={`orphaned-${item.text}-${item.page}-${itemIndex}`}
                           onClick={() => handleItemClick(item.page, `orphaned-${item.text}`)}
-                          className={`w-full flex items-center justify-between p-2 hover:bg-gray-50 text-left group transition-colors ${getIndentClass(item.level)} ${
+                          className={`w-full flex items-center justify-between p-2 hover:bg-gray-50 text-left group transition-colors min-w-0 ${getIndentClass(item.level)} ${
                             activeItem === `orphaned-${item.text}` ? 'bg-blue-50 border-l-2 border-blue-500' : ''
                           }`}
                         >
                           <div className="flex items-center min-w-0 flex-1">
-                            {getIconForLevel(item.level)}
+                            <div className="flex-shrink-0">
+                              {getIconForLevel(item.level)}
+                            </div>
                             <span className="ml-2 text-sm text-gray-700 truncate" title={item.text}>
                               {item.text}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded flex-shrink-0 ml-2">
                             {item.page + 1}
                           </span>
                         </button>
