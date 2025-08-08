@@ -109,10 +109,11 @@ const Arena = () => {
 
     // Handlers
     const handlePdfSelection = (file: File) => {
+        const idx = pdfList.indexOf(file);
         setSelectedPdf(file);
         setPdfFile(file);
         setPdfFileName(file.name);
-        setPdfUrl(pdfUrls[files.indexOf(file)]);
+        setPdfUrl(pdfUrls[idx]);
         setNavigationPage(undefined); // Reset navigation when switching PDFs
     };
 
@@ -121,18 +122,7 @@ const Arena = () => {
         setNavigationPage(page);
     };
 
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files?.length) return;
-
-        const file = files[0];
-        if (file.type === 'application/pdf') {
-            setPdfFile(file);
-            setPdfFileName(file.name);
-            setPdfUrl(URL.createObjectURL(file));
-            setNavigationPage(undefined); // Reset navigation for new file
-        }
-    };
+    // Removed duplicate handleFileUpload function declaration
 
     const toolbarOptions = [
         {
@@ -207,6 +197,95 @@ const Arena = () => {
         }
     ];
 
+    // PDF list state (for add/delete)
+    const [pdfList, setPdfList] = useState<File[]>(files);
+
+    // Update pdfUrls when pdfList changes
+    useEffect(() => {
+        const urls = pdfList.map(file => URL.createObjectURL(file));
+        setPdfUrls(urls);
+        // If current selectedPdf is removed, select first
+        if (!pdfList.includes(selectedPdf!)) {
+            setSelectedPdf(pdfList[0] || null);
+            setPdfFile(pdfList[0] || null);
+            setPdfFileName(pdfList[0]?.name || '');
+            setPdfUrl(urls[0] || null);
+        }
+    }, [pdfList]);
+
+    // Add PDF handler
+    const handleAddPdf = () => {
+        fileInputRef.current?.click();
+    };
+
+    // File upload handler (add to list)
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const filesInput = event.target.files;
+        if (!filesInput?.length) return;
+        const file = filesInput[0];
+        if (file.type === 'application/pdf') {
+            setPdfList(prev => [...prev, file]);
+            setSelectedPdf(file);
+            setPdfFile(file);
+            setPdfFileName(file.name);
+            setPdfUrl(URL.createObjectURL(file));
+            setNavigationPage(undefined);
+        }
+        // Reset input value so same file can be uploaded again
+        event.target.value = '';
+    };
+
+    // Delete PDF handler
+    const handleDeletePdf = () => {
+        if (!selectedPdf) return;
+        const idx = pdfList.indexOf(selectedPdf);
+        if (idx !== -1) {
+            const newList = pdfList.filter((_, i) => i !== idx);
+            setPdfList(newList);
+        }
+    };
+
+    // Download PDF handler
+    const handleDownloadPdf = () => {
+        if (!selectedPdf) return;
+        const url = pdfUrls[pdfList.indexOf(selectedPdf)];
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = selectedPdf.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // Toolbar action dispatcher
+    const handleToolbarAction = (actionId: string, toolId: string) => {
+        if (toolId === 'pdf') {
+            if (actionId === 'add-pdf') handleAddPdf();
+            if (actionId === 'delete-pdf') handleDeletePdf();
+            if (actionId === 'download-pdf') handleDownloadPdf();
+        }
+    };
+
+    // Remove PDF from sidebar
+    const handleRemoveSidebarPdf = (file: File) => {
+        setPdfList(prev => {
+            const newList = prev.filter(f => f !== file);
+            if (newList.length === 0) {
+                setSelectedPdf(null);
+                setPdfFile(null);
+                setPdfFileName('');
+                setPdfUrl(null);
+            } else if (!newList.includes(selectedPdf!)) {
+                // If the removed file was selected, select the first remaining
+                setSelectedPdf(newList[0]);
+                setPdfFile(newList[0]);
+                setPdfFileName(newList[0].name);
+                setPdfUrl(pdfUrls[0]);
+            }
+            return newList;
+        });
+    };
+
     // Update the return statement to show loading state
     return (
         <>
@@ -234,27 +313,30 @@ const Arena = () => {
                         activeToolbar={activeToolbar}
                         onToggleToolbar={(toolId: string) => setActiveToolbar(activeToolbar === toolId ? null : toolId)}
                         onCloseToolbar={() => setActiveToolbar(null)}
-                        onActionClick={() => { }}
+                        onActionClick={handleToolbarAction}
                     />
 
                     {/* Main Content Layout */}
                     <div className="flex flex-1">
                         <PDFListSidebar
                             projectName={projectName}
-                            files={files}
+                            files={pdfList}
                             selectedPdf={selectedPdf}
                             onPdfSelect={handlePdfSelection}
                             isMinimized={isSidebarMinimized}
                             onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
+                            onRemovePdf={handleRemoveSidebarPdf}
                         />
 
                         {/* PDF Content Area with Outline */}
                         <div className="flex-1 flex bg-white">
+                        {selectedPdf && (
                             <PDFOutlineSidebar
                                 pdfFile={selectedPdf}
                                 onPageNavigation={handlePageNavigation}
                                 className="w-80"
                             />
+                        )}
                             
                             <div className="flex-1 flex flex-col">
                                 <PDFViewer
@@ -262,7 +344,7 @@ const Arena = () => {
                                     pdfUrl={pdfUrl}
                                     pdfFileName={pdfFileName}
                                     isAdobeLoaded={isAdobeLoaded}
-                                    onFileUpload={() => fileInputRef.current?.click()}
+                                    onFileUpload={handleAddPdf}
                                     navigationPage={navigationPage}
                                 />
                             </div>

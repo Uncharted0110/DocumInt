@@ -32,8 +32,17 @@ const { navigateToPage } = useAdobePDFNavigation({
 
   useEffect(() => {
     if (isAdobeLoaded && pdfUrl && pdfFileName) {
-      initializePDFViewer();
+      // Force re-initialize viewer by creating a new AdobeDC.View instance
+      if (pdfViewerRef.current) {
+        pdfViewerRef.current.innerHTML = '';
+      }
+      setPdfViewer(null);
+      setIsViewerReady(false);
+      setTimeout(() => {
+        initializePDFViewer();
+      }, 100);
     }
+    // eslint-disable-next-line
   }, [isAdobeLoaded, pdfUrl, pdfFileName]);
 
   // Handle page navigation using the custom hook
@@ -123,7 +132,7 @@ const { navigateToPage } = useAdobePDFNavigation({
   // Reset navigation tracking when PDF changes
   useEffect(() => {
     lastNavigationPageRef.current = undefined;
-    setIsViewerReady(false);
+    // Don't set isViewerReady here, let initializePDFViewer handle it
   }, [pdfFile]);
 
   return (
