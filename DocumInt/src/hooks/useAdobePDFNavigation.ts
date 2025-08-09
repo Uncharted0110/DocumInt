@@ -63,6 +63,48 @@ export const useAdobePDFNavigation = ({ pdfViewer, containerRef }: UseAdobePDFNa
     setupNavigation();
   }, [pdfViewer]);
 
+  // Helper function to try different navigation methods
+  const tryNavigationMethod = useCallback((method: () => any, methodName: string, targetPage: number): boolean => {
+    try {
+      if (typeof method === 'function') {
+        const result = method();
+        if (result !== false && result !== undefined) {
+          console.log(`Successfully navigated to page ${targetPage} via ${methodName}`);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.log(`Method ${methodName} failed:`, error);
+    }
+    return false;
+  }, []);
+
+  // Helper function to try UI simulation
+  const tryUISimulation = useCallback((targetPage: number) => {
+    setTimeout(() => {
+      try {
+        const iframe = containerRef.current?.querySelector('iframe');
+        if (iframe?.contentDocument || iframe?.contentWindow) {
+          const pageInputs = iframe.contentDocument?.querySelectorAll('input[type="number"], input[aria-label*="page"], input[placeholder*="page"]') || [];
+          for (const input of pageInputs) {
+            try {
+              (input as HTMLInputElement).value = targetPage.toString();
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+              console.log(`Attempted page navigation via input field`);
+              break;
+            } catch (inputError) {
+              console.log('Input simulation failed:', inputError);
+            }
+          }
+        }
+      } catch (iframeError) {
+        console.warn('Iframe interaction failed:', iframeError);
+      }
+    }, 100);
+  }, [containerRef]);
+
   const navigateToPage = useCallback((pageNumber: number) => {
     const targetPage = pageNumber + 1; // Convert to 1-based indexing
     
@@ -71,77 +113,100 @@ export const useAdobePDFNavigation = ({ pdfViewer, containerRef }: UseAdobePDFNa
     // If document isn't ready yet, queue the navigation
     if (!isDocumentReadyRef.current || !adobeAPIsRef.current) {
       console.log(`Document not ready, queuing navigation to page ${targetPage}`);
-      navigationQueueRef.current = [pageNumber]; // Replace queue with latest navigation
+      navigationQueueRef.current = [pageNumber];
       return false;
     }
 
     try {
-      // Method 1: Try gotoLocation with page number
+      // Method 1: Try gotoLocation
       if (adobeAPIsRef.current.gotoLocation) {
-        adobeAPIsRef.current.gotoLocation(targetPage);
-        console.log(`Successfully navigated to page ${targetPage} via gotoLocation`);
-        return true;
-      }
-
-      // Method 2: Try using the page APIs
-      if (adobeAPIsRef.current.getPageAPIs) {
-        adobeAPIsRef.current.getPageAPIs().then((pageAPIs: any) => {
-          if (pageAPIs?.gotoPage) {
-            pageAPIs.gotoPage(targetPage);
-            console.log(`Successfully navigated to page ${targetPage} via pageAPIs.gotoPage`);
-          } else {
-            console.warn('pageAPIs.gotoPage not available');
-          }
-        }).catch((error: any) => {
-          console.error('Error getting page APIs:', error);
-        });
-        return true;
-      }
-
-      // Method 3: Try direct API calls with different formats
-      if (adobeAPIsRef.current.getCurrentPage) {
-        // First check if we can get current page (indicates navigation API is available)
         try {
-          const methods = [
-            () => adobeAPIsRef.current.goToPage?.(targetPage),
-            () => adobeAPIsRef.current.navigateToPage?.(targetPage),
-            () => adobeAPIsRef.current.setCurrentPage?.(targetPage),
-          ];
+          adobeAPIsRef.current.gotoLocation(targetPage);
+          console.log(`Successfully navigated to page ${targetPage} via gotoLocation`);
+          return true;
+        } catch (error) {
+          console.log('gotoLocation failed, trying next method:', error);
+        }
+      }
 
-          for (const method of methods) {
-            try {
-              const result = method();
-              if (result !== false && result !== undefined) {
-                console.log(`Successfully navigated to page ${targetPage} via direct API`);
-                return true;
-              }
-            } catch (methodError) {
-              console.log('Method failed, trying next:', methodError);
-              continue;
-            }
+      // Method 2: Try page APIs
+      if (adobeAPIsRef.current.getPageAPIs) {
+        try {
+          const pageAPIsPromise = adobeAPIsRef.current.getPageAPIs();
+          if (pageAPIsPromise && typeof pageAPIsPromise.then === 'function') {
+            pageAPIsPromise
+              .then((pageAPIs: any) => {
+                if (pageAPIs?.gotoPage) {
+                  pageAPIs.gotoPage(targetPage);
+                  console.log(`Successfully navigated to page ${targetPage} via pageAPIs.gotoPage`);
+                } else if (pageAPIs?.goToPage) {
+                  pageAPIs.goToPage(targetPage);
+                  console.log(`Successfully navigated to page ${targetPage} via pageAPIs.goToPage`);
+                }
+              })
+              .catch((error: any) => {
+                console.error('Error getting page APIs:', error);
+              });
+            return true;
           }
         } catch (error) {
-          console.warn('Direct API methods failed:', error);
+          console.log('getPageAPIs failed, trying next method:', error);
         }
       }
 
-      // Method 4: Fallback - try to trigger navigation via events
-      console.warn(`All navigation methods failed for page ${targetPage}, trying event-based approach`);
-      
-      // Try to find and trigger page navigation controls
-      const iframe = containerRef.current?.querySelector('iframe');
-      if (iframe?.contentWindow) {
-        try {
-          // Send a message to the iframe if possible
-          iframe.contentWindow.postMessage({
-            type: 'navigateToPage',
-            page: targetPage
-          }, window.location.origin);
-          console.log(`Attempted iframe navigation to page ${targetPage}`);
-        } catch (iframeError) {
-          console.warn('Iframe navigation failed:', iframeError);
+      // Method 3: Try direct navigation methods (1-based)
+      const oneBasedMethods = [
+        { name: 'gotoPage', fn: () => adobeAPIsRef.current.gotoPage?.(targetPage) },
+        { name: 'goToPage', fn: () => adobeAPIsRef.current.goToPage?.(targetPage) },
+        { name: 'navigateToPage', fn: () => adobeAPIsRef.current.navigateToPage?.(targetPage) },
+        { name: 'setCurrentPage', fn: () => adobeAPIsRef.current.setCurrentPage?.(targetPage) },
+        { name: 'jumpToPage', fn: () => adobeAPIsRef.current.jumpToPage?.(targetPage) },
+      ];
+
+      for (const method of oneBasedMethods) {
+        if (tryNavigationMethod(method.fn, method.name, targetPage)) {
+          return true;
         }
       }
+
+      // Method 4: Try with 0-based indexing
+      console.log(`Trying 0-based indexing for page ${pageNumber}`);
+      const zeroBasedMethods = oneBasedMethods.map(method => ({
+        ...method,
+        fn: () => {
+          const fnName = method.name;
+          return adobeAPIsRef.current[fnName]?.(pageNumber);
+        }
+      }));
+
+      for (const method of zeroBasedMethods) {
+        if (tryNavigationMethod(method.fn, `${method.name} (0-based)`, pageNumber)) {
+          return true;
+        }
+      }
+
+      // Method 5: Try location-based navigation
+      if (adobeAPIsRef.current.getCurrentLocation) {
+        try {
+          adobeAPIsRef.current.getCurrentLocation().then((location: any) => {
+            if (location && typeof location.pageNumber !== 'undefined') {
+              location.pageNumber = targetPage;
+              if (adobeAPIsRef.current.setLocation) {
+                adobeAPIsRef.current.setLocation(location);
+                console.log(`Successfully navigated via setLocation to page ${targetPage}`);
+              }
+            }
+          }).catch((error: any) => {
+            console.error('Location-based navigation failed:', error);
+          });
+        } catch (error) {
+          console.log('Location-based navigation not available:', error);
+        }
+      }
+
+      // Method 6: UI simulation fallback
+      console.warn(`All API methods failed for page ${targetPage}, trying UI simulation`);
+      tryUISimulation(targetPage);
 
       return false;
 
@@ -149,7 +214,7 @@ export const useAdobePDFNavigation = ({ pdfViewer, containerRef }: UseAdobePDFNa
       console.error('Navigation error:', error);
       return false;
     }
-  }, [containerRef]);
+  }, [containerRef, tryNavigationMethod, tryUISimulation]);
 
   return { navigateToPage };
 };

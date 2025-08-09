@@ -6,7 +6,7 @@ import verticalLogo from '../assets/verticalLogo.png';
 const Login = () => {
   const navigate = useNavigate();
 
-  const handleSocialLogin = async (provider: 'google' | 'github') => {
+  const handleSocialLogin = async () => {
     const magic = new Magic(import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY, {
       extensions: [new OAuthExtension()],
     });
@@ -245,7 +245,7 @@ const Login = () => {
           {/* Login Buttons */}
           <div className="space-y-4">
             <button
-              onClick={() => handleSocialLogin('google')}
+              onClick={() => handleSocialLogin()}
               className="w-full flex items-center justify-center px-6 py-4 bg-white border border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 shadow-sm hover:shadow-md group"
             >
               <svg className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
@@ -258,7 +258,7 @@ const Login = () => {
             </button>
 
             <button
-              onClick={() => handleSocialLogin('github')}
+              onClick={() => handleSocialLogin()}
               className="w-full flex items-center justify-center px-6 py-4 bg-gray-900 hover:bg-gray-800 rounded-xl text-white font-medium transition-all duration-200 shadow-sm hover:shadow-md group"
             >
               <svg className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">

@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, FileText, Hash, Book } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Hash, Book, Plus, X, Star } from 'lucide-react';
 
 interface OutlineItem {
   level: "H1" | "H2" | "H3";
   text: string;
   page: number;
+}
+
+interface CustomBookmark {
+  id: string;
+  title: string;
+  page: number;
+  level: "H1" | "H2" | "H3";
+  isCustom: boolean;
+  color?: string;
 }
 
 interface PDFOutlineData {
@@ -16,12 +25,18 @@ interface PDFOutlineSidebarProps {
   pdfFile: File | null;
   onPageNavigation: (page: number) => void;
   className?: string;
+  customBookmarks?: CustomBookmark[];
+  onAddBookmark?: (bookmark: Omit<CustomBookmark, 'id'>) => void;
+  onDeleteBookmark?: (bookmarkId: string) => void;
 }
 
 const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
   pdfFile,
   onPageNavigation,
-  className = ""
+  className = "",
+  customBookmarks = [],
+  onAddBookmark,
+  onDeleteBookmark
 }) => {
   const [outlineData, setOutlineData] = useState<PDFOutlineData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,6 +44,32 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeItem, setActiveItem] = useState<string | null>(null);
+  const [showBookmarkForm, setShowBookmarkForm] = useState(false);
+  const [newBookmarkTitle, setNewBookmarkTitle] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Merge extracted outline with custom bookmarks
+  const mergedOutline = React.useMemo(() => {
+    const extracted = outlineData?.outline || [];
+    const combined = [
+      ...extracted.map(item => ({
+        ...item,
+        id: `outline-${item.text}-${item.page}`,
+        isCustom: false as const
+      })),
+      ...customBookmarks.map(bookmark => ({
+        level: bookmark.level,
+        text: bookmark.title, // Map title to text
+        page: bookmark.page,
+        id: bookmark.id,
+        isCustom: bookmark.isCustom,
+        color: bookmark.color
+      }))
+    ];
+    
+    // Sort by page number
+    return combined.sort((a, b) => a.page - b.page);
+  }, [outlineData, customBookmarks]);
 
   // Extract outline when PDF file changes
   useEffect(() => {
@@ -91,6 +132,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
     
     // Set active item for visual feedback
     setActiveItem(itemText);
+    setCurrentPage(page + 1);
     
     // Clear active state after a moment
     setTimeout(() => setActiveItem(null), 2000);
@@ -112,6 +154,26 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
     }
   };
 
+  const handleAddBookmark = () => {
+    if (newBookmarkTitle.trim() && onAddBookmark) {
+      onAddBookmark({
+        title: newBookmarkTitle.trim(),
+        page: currentPage - 1, // Convert back to 0-based
+        level: "H2",
+        isCustom: true,
+        color: "#3B82F6"
+      });
+      setNewBookmarkTitle('');
+      setShowBookmarkForm(false);
+    }
+  };
+
+  const handleDeleteBookmark = (bookmarkId: string) => {
+    if (onDeleteBookmark) {
+      onDeleteBookmark(bookmarkId);
+    }
+  };
+
   const getIndentClass = (level: string) => {
     switch (level) {
       case 'H1': return 'pl-2';
@@ -121,7 +183,10 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
     }
   };
 
-  const getIconForLevel = (level: string) => {
+  const getIconForLevel = (level: string, isCustom?: boolean) => {
+    if (isCustom) {
+      return <Star size={14} className="text-yellow-500" />;
+    }
     switch (level) {
       case 'H1': return <Book size={16} className="text-blue-600" />;
       case 'H2': return <FileText size={14} className="text-green-600" />;
@@ -130,9 +195,15 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
     }
   };
 
-  const groupOutlineByH1 = (outline: OutlineItem[]) => {
-    const groups: { h1: OutlineItem | null; children: OutlineItem[] }[] = [];
-    let currentGroup: { h1: OutlineItem | null; children: OutlineItem[] } = { h1: null, children: [] };
+  const groupOutlineByH1 = (outline: (OutlineItem & { id?: string; isCustom?: boolean; color?: string })[]) => {
+    const groups: { 
+      h1: (OutlineItem & { id?: string; isCustom?: boolean; color?: string }) | null; 
+      children: (OutlineItem & { id?: string; isCustom?: boolean; color?: string })[] 
+    }[] = [];
+    let currentGroup: { 
+      h1: (OutlineItem & { id?: string; isCustom?: boolean; color?: string }) | null; 
+      children: (OutlineItem & { id?: string; isCustom?: boolean; color?: string })[] 
+    } = { h1: null, children: [] };
 
     outline.forEach(item => {
       if (item.level === 'H1') {
@@ -174,17 +245,60 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-gray-800">Document Outline</h3>
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-          </button>
+          <div className="flex items-center space-x-2">
+            {onAddBookmark && (
+              <button
+                onClick={() => setShowBookmarkForm(!showBookmarkForm)}
+                className="p-1 hover:bg-gray-100 rounded text-blue-600"
+                title="Add Bookmark"
+              >
+                <Plus size={16} />
+              </button>
+            )}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
+              {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
         </div>
         {outlineData?.title && !isCollapsed && (
           <p className="text-xs text-gray-600 mt-1 truncate" title={outlineData.title}>
             {outlineData.title}
           </p>
+        )}
+        
+        {/* Bookmark Form */}
+        {showBookmarkForm && !isCollapsed && (
+          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+            <h4 className="text-xs font-medium text-gray-700 mb-2">Add Custom Bookmark</h4>
+            <input
+              type="text"
+              value={newBookmarkTitle}
+              onChange={(e) => setNewBookmarkTitle(e.target.value)}
+              placeholder={`Bookmark for page ${currentPage}`}
+              className="w-full text-xs border rounded px-2 py-1 mb-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              onKeyDown={(e) => e.key === 'Enter' && handleAddBookmark()}
+            />
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setShowBookmarkForm(false);
+                  setNewBookmarkTitle('');
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddBookmark}
+                className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+              >
+                Add
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
@@ -204,15 +318,15 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
             </div>
           )}
 
-          {outlineData && !isLoading && (
+          {(outlineData || customBookmarks.length > 0) && !isLoading && (
             <div className="py-2">
-              {outlineData.outline.length === 0 ? (
+              {mergedOutline.length === 0 ? (
                 <div className="p-4 text-center">
-                  <p className="text-xs text-gray-500">No outline found in this document</p>
+                  <p className="text-xs text-gray-500">No outline or bookmarks found</p>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {groupOutlineByH1(outlineData.outline).map((group, groupIndex) => (
+                  {groupOutlineByH1(mergedOutline).map((group, groupIndex) => (
                     <div key={`group-${groupIndex}-${group.h1?.text || 'orphaned'}`}>
                       {/* H1 Section Header */}
                       {group.h1 && (
@@ -240,14 +354,30 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
                               } ${group.children.length === 0 ? 'ml-8' : ''}`}
                             >
                               <div className="flex items-center min-w-0 flex-1">
-                                {getIconForLevel(group.h1.level)}
-                                <span className="ml-2 text-sm font-medium text-gray-800 truncate" title={group.h1.text}>
+                                {getIconForLevel(group.h1.level, group.h1.isCustom)}
+                                <span className={`ml-2 text-sm font-medium truncate ${
+                                  group.h1.isCustom ? 'text-blue-700' : 'text-gray-800'
+                                }`} title={group.h1.text}>
                                   {group.h1.text}
                                 </span>
                               </div>
-                              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                                {group.h1.page + 1}
-                              </span>
+                              <div className="flex items-center space-x-1">
+                                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                  {group.h1.page + 1}
+                                </span>
+                                {group.h1.isCustom && onDeleteBookmark && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteBookmark(group.h1!.id!);
+                                    }}
+                                    className="p-1 hover:bg-red-100 rounded text-red-500"
+                                    title="Delete bookmark"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </div>
                             </button>
                           </div>
 
@@ -263,14 +393,30 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
                                   }`}
                                 >
                                   <div className="flex items-center min-w-0 flex-1">
-                                    {getIconForLevel(item.level)}
-                                    <span className="ml-2 text-xs text-gray-700 truncate" title={item.text}>
+                                    {getIconForLevel(item.level, item.isCustom)}
+                                    <span className={`ml-2 text-xs truncate ${
+                                      item.isCustom ? 'text-blue-700' : 'text-gray-700'
+                                    }`} title={item.text}>
                                       {item.text}
                                     </span>
                                   </div>
-                                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                                    {item.page + 1}
-                                  </span>
+                                  <div className="flex items-center space-x-1">
+                                    <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                      {item.page + 1}
+                                    </span>
+                                    {item.isCustom && onDeleteBookmark && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteBookmark(item.id!);
+                                        }}
+                                        className="p-1 hover:bg-red-100 rounded text-red-500"
+                                        title="Delete bookmark"
+                                      >
+                                        <X size={10} />
+                                      </button>
+                                    )}
+                                  </div>
                                 </button>
                               ))}
                             </div>
@@ -288,14 +434,30 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
                           }`}
                         >
                           <div className="flex items-center min-w-0 flex-1">
-                            {getIconForLevel(item.level)}
-                            <span className="ml-2 text-sm text-gray-700 truncate" title={item.text}>
+                            {getIconForLevel(item.level, item.isCustom)}
+                            <span className={`ml-2 text-sm truncate ${
+                              item.isCustom ? 'text-blue-700' : 'text-gray-700'
+                            }`} title={item.text}>
                               {item.text}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            {item.page + 1}
-                          </span>
+                          <div className="flex items-center space-x-1">
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                              {item.page + 1}
+                            </span>
+                            {item.isCustom && onDeleteBookmark && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteBookmark(item.id!);
+                                }}
+                                className="p-1 hover:bg-red-100 rounded text-red-500"
+                                title="Delete bookmark"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
                         </button>
                       ))}
                     </div>
