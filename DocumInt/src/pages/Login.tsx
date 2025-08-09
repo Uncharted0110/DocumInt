@@ -1,232 +1,68 @@
 import { useNavigate } from 'react-router-dom';
-import { Magic } from 'magic-sdk';
-import { OAuthExtension } from '@magic-ext/oauth';
 import verticalLogo from '../assets/verticalLogo.png';
+import { BackgroundLayout } from '../components/background';
 
 const Login = () => {
   const navigate = useNavigate();
 
+  const handleGoogleLogin = () => {
+    // Google OAuth configuration
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const redirectUri = encodeURIComponent("http://localhost:5173/projects");
+    const scope = encodeURIComponent("openid email profile");
+    const responseType = "code";
+    const state = Math.random().toString(36).substring(2, 15); // Generate random state for security
+    
+    // Store state in sessionStorage to verify later
+    sessionStorage.setItem('oauth_state', state);
+    
+    // Construct Google OAuth URL
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${googleClientId}&` +
+      `redirect_uri=${redirectUri}&` +
+      `scope=${scope}&` +
+      `response_type=${responseType}&` +
+      `state=${state}`;
+    
+    // Redirect to Google OAuth
+    window.location.href = googleAuthUrl;
+  };
+
+  const handleGithubLogin = () => {
+    // GitHub OAuth configuration
+    const githubClientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
+    const redirectUri = encodeURIComponent("http://localhost:5173/projects");
+    const scope = encodeURIComponent("user:email");
+    const state = Math.random().toString(36).substring(2, 15); // Generate random state for security
+    
+    // Store state in sessionStorage to verify later
+    sessionStorage.setItem('oauth_state', state);
+    
+    // Construct GitHub OAuth URL
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?` +
+      `client_id=${githubClientId}&` +
+      `redirect_uri=${redirectUri}&` +
+      `scope=${scope}&` +
+      `state=${state}`;
+    
+    // Redirect to GitHub OAuth
+    window.location.href = githubAuthUrl;
+  };
+
   const handleSocialLogin = async (provider: 'google' | 'github') => {
-    const magic = new Magic(import.meta.env.VITE_MAGIC_PUBLISHABLE_KEY, {
-      extensions: [new OAuthExtension()],
-    });
-    console.log("http://localhost:5173/projects");
-    await magic.oauth.loginWithRedirect({
-      provider: 'google',
-      redirectURI: "http://localhost:5173/projects",
-
-    });
-
+    if (provider === 'google') {
+      handleGoogleLogin();
+    } else if (provider === 'github') {
+      handleGithubLogin();
+    }
   };
 
   const handleGuest = () => {
-    navigate('/projects',);
+    navigate('/projects');
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900">
-      {/* Enhanced Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Floating Document Icons with More Detail */}
-        <div className="absolute top-20 left-15 w-24 h-24 bg-white/90 rounded-lg shadow-2xl opacity-70 animate-bounce border border-red-400/80" style={{ animationDelay: '0s', animationDuration: '6s' }}>
-          <div className="w-full h-2 bg-red-400 rounded-t-lg"></div>
-          <div className="p-1 space-y-1">
-            <div className="w-8 h-0.5 bg-gray-600 rounded"></div>
-            <div className="w-6 h-0.5 bg-gray-600 rounded"></div>
-            <div className="w-7 h-0.5 bg-gray-600 rounded"></div>
-          </div>
-        </div>
-
-        <div className="absolute top-40 right-20 w-10 h-12 bg-white/90 rounded-lg shadow-2xl opacity-65 animate-bounce border border-blue-400/80" style={{ animationDelay: '2s', animationDuration: '8s' }}>
-          <div className="w-full h-1.5 bg-blue-400 rounded-t-lg"></div>
-          <div className="p-1 space-y-1">
-            <div className="w-6 h-0.5 bg-gray-600 rounded"></div>
-            <div className="w-5 h-0.5 bg-gray-600 rounded"></div>
-          </div>
-        </div>
-
-        <div className="absolute bottom-32 left-20 w-11 h-13 bg-white/90 rounded-lg shadow-2xl opacity-70 animate-bounce border border-green-400/80" style={{ animationDelay: '4s', animationDuration: '7s' }}>
-          <div className="w-full h-2 bg-green-400 rounded-t-lg"></div>
-          <div className="p-1 space-y-1">
-            <div className="w-7 h-0.5 bg-gray-600 rounded"></div>
-            <div className="w-6 h-0.5 bg-gray-600 rounded"></div>
-          </div>
-        </div>
-
-        {/* Floating Chart Elements */}
-        <div className="absolute top-32 right-40 w-16 h-12 bg-white/80 rounded-lg shadow-2xl opacity-60 animate-pulse border border-blue-400/70" style={{ animationDelay: '1s' }}>
-          <div className="p-2 h-full flex items-end justify-between">
-            <div className="w-1 bg-blue-500 rounded-full" style={{ height: '60%' }}></div>
-            <div className="w-1 bg-blue-600 rounded-full" style={{ height: '80%' }}></div>
-            <div className="w-1 bg-blue-700 rounded-full" style={{ height: '40%' }}></div>
-            <div className="w-1 bg-blue-800 rounded-full" style={{ height: '90%' }}></div>
-            <div className="w-1 bg-blue-900 rounded-full" style={{ height: '70%' }}></div>
-          </div>
-        </div>
-
-        <div className="absolute bottom-40 right-10 w-20 h-14 bg-white/80 rounded-lg shadow-2xl opacity-65 animate-pulse border border-indigo-400/70" style={{ animationDelay: '3s' }}>
-          <div className="p-2">
-            <div className="w-3 h-3 bg-indigo-500 rounded-full mb-1"></div>
-            <div className="flex space-x-0.5">
-              <div className="w-3 h-1 bg-indigo-600 rounded"></div>
-              <div className="w-4 h-1 bg-indigo-700 rounded"></div>
-              <div className="w-2 h-1 bg-indigo-800 rounded"></div>
-            </div>
-          </div>
-        </div>
-
-        {/* AI Brain/Neural Network Nodes */}
-        <div className="absolute top-60 left-40 w-32 h-32 opacity-15">
-          <div className="relative">
-            <div className="absolute top-0 left-0 w-3 h-3 bg-purple-300 rounded-full animate-ping" style={{ animationDuration: '3s' }}></div>
-            <div className="absolute top-2 right-0 w-2 h-2 bg-blue-400 rounded-full animate-ping" style={{ animationDuration: '4s', animationDelay: '1s' }}></div>
-            <div className="absolute bottom-0 left-2 w-2.5 h-2.5 bg-indigo-400 rounded-full animate-ping" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }}></div>
-            <div className="absolute bottom-1 right-1 w-2 h-2 bg-cyan-400 rounded-full animate-ping" style={{ animationDuration: '2.5s', animationDelay: '2s' }}></div>
-            {/* Connecting lines */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 48 48">
-              <line x1="6" y1="6" x2="36" y2="12" stroke="url(#nodeGradient)" strokeWidth="1" opacity="0.6">
-                <animate attributeName="stroke-dasharray" values="0,100;100,0" dur="4s" repeatCount="indefinite" />
-              </line>
-              <line x1="6" y1="6" x2="14" y2="36" stroke="url(#nodeGradient)" strokeWidth="1" opacity="0.6">
-                <animate attributeName="stroke-dasharray" values="0,100;100,0" dur="3s" repeatCount="indefinite" />
-              </line>
-            </svg>
-          </div>
-        </div>
-
-        {/* Magnifying Glass with Search Elements */}
-        <div className="absolute top-80 right-60 w-16 h-16 opacity-10 animate-spin" style={{ animationDuration: '20s' }}>
-          <div className="relative">
-            <div className="w-10 h-10 border-2 border-gray-300 rounded-full"></div>
-            <div className="absolute top-8 left-8 w-6 h-1 bg-gray-300 rounded-full transform rotate-45"></div>
-            <div className="absolute top-2 left-2 w-6 h-6 border border-gray-400 rounded-full flex items-center justify-center">
-              <div className="w-2 h-0.5 bg-gray-400 rounded"></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute bottom-60 right-32 w-12 h-12 opacity-15 animate-spin" style={{ animationDuration: '15s' }}>
-          <div className="relative">
-            <div className="w-8 h-8 border-2 border-blue-300 rounded-full"></div>
-            <div className="absolute top-6 left-6 w-4 h-1 bg-blue-300 rounded-full transform rotate-45"></div>
-          </div>
-        </div>
-
-        {/* Code Blocks with Syntax Highlighting Effect */}
-        <div className="absolute top-96 right-80 w-24 h-12 bg-gray-900/10 rounded-md p-2 opacity-20 border border-gray-300/30">
-          <div className="space-y-0.5">
-            <div className="flex space-x-1">
-              <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
-              <div className="w-8 h-0.5 bg-blue-400 rounded"></div>
-            </div>
-            <div className="flex space-x-1">
-              <div className="w-1 h-1 bg-green-400 rounded-full"></div>
-              <div className="w-12 h-0.5 bg-green-400 rounded"></div>
-            </div>
-            <div className="flex space-x-1">
-              <div className="w-1 h-1 bg-orange-400 rounded-full"></div>
-              <div className="w-6 h-0.5 bg-orange-400 rounded"></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute bottom-20 left-80 w-24 h-16 bg-gray-900/10 rounded-md p-2 opacity-15 border border-gray-300/30">
-          <div className="space-y-0.5">
-            <div className="flex space-x-1">
-              <div className="w-1 h-1 bg-red-400 rounded-full"></div>
-              <div className="w-10 h-0.5 bg-red-400 rounded"></div>
-            </div>
-            <div className="flex space-x-1">
-              <div className="w-1 h-1 bg-cyan-400 rounded-full"></div>
-              <div className="w-8 h-0.5 bg-cyan-400 rounded"></div>
-            </div>
-            <div className="flex space-x-1">
-              <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
-              <div className="w-14 h-0.5 bg-yellow-400 rounded"></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Enhanced AI Data Flow Lines */}
-        <svg className="absolute inset-0 w-full h-full opacity-8" viewBox="0 0 800 600">
-          <path d="M100,100 Q200,50 300,100 T500,150" stroke="url(#gradient1)" strokeWidth="3" fill="none">
-            <animate attributeName="stroke-dasharray" values="0,1000;1000,0;0,1000" dur="8s" repeatCount="indefinite" />
-          </path>
-          <path d="M600,400 Q500,350 400,400 T200,450" stroke="url(#gradient2)" strokeWidth="3" fill="none">
-            <animate attributeName="stroke-dasharray" values="0,800;800,0;0,800" dur="10s" repeatCount="indefinite" />
-          </path>
-          <path d="M150,500 Q300,450 450,500 T700,400" stroke="url(#gradient3)" strokeWidth="2" fill="none">
-            <animate attributeName="stroke-dasharray" values="0,1200;1200,0;0,1200" dur="12s" repeatCount="indefinite" />
-          </path>
-          <circle cx="300" cy="100" r="3" fill="#3b82f6" opacity="0.3">
-            <animate attributeName="r" values="2;5;2" dur="3s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="500" cy="150" r="2" fill="#6366f1" opacity="0.4">
-            <animate attributeName="r" values="1;4;1" dur="4s" repeatCount="indefinite" />
-          </circle>
-          <defs>
-            <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0" />
-              <stop offset="50%" stopColor="#3b82f6" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#6366f1" stopOpacity="0" />
-              <stop offset="50%" stopColor="#6366f1" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id="gradient3" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0" />
-              <stop offset="50%" stopColor="#8b5cf6" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id="nodeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#a855f7" stopOpacity="0" />
-              <stop offset="50%" stopColor="#a855f7" stopOpacity="1" />
-              <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-        </svg>
-
-        {/* Floating Geometric Shapes with Gradients */}
-        <div className="absolute top-40 left-60 w-6 h-6 bg-gradient-to-br from-blue-300 to-indigo-400 rounded-full opacity-25 animate-ping shadow-lg" style={{ animationDuration: '4s' }}></div>
-        <div className="absolute bottom-80 left-96 w-8 h-8 bg-gradient-to-br from-cyan-300 to-blue-400 rounded-lg opacity-20 animate-ping shadow-lg" style={{ animationDuration: '6s' }}></div>
-        <div className="absolute top-20 right-96 w-4 h-4 bg-gradient-to-br from-indigo-300 to-purple-400 rounded-full opacity-25 animate-ping shadow-lg" style={{ animationDuration: '5s' }}></div>
-
-        {/* Cloud Computing Icons */}
-        <div className="absolute top-72 left-24 w-14 h-8 opacity-20">
-          <div className="relative">
-            <div className="absolute bottom-0 left-2 w-8 h-4 bg-blue-200 rounded-full"></div>
-            <div className="absolute bottom-1 left-0 w-6 h-3 bg-blue-300 rounded-full"></div>
-            <div className="absolute bottom-1 right-0 w-4 h-3 bg-blue-300 rounded-full"></div>
-            <div className="absolute bottom-2 left-4 w-3 h-2 bg-blue-400 rounded-full"></div>
-          </div>
-        </div>
-
-        {/* Database/Server Icons */}
-        <div className="absolute bottom-72 right-24 w-8 h-10 opacity-20">
-          <div className="space-y-0.5">
-            <div className="w-full h-2 bg-gray-300 rounded-full"></div>
-            <div className="w-full h-2 bg-gray-400 rounded-full"></div>
-            <div className="w-full h-2 bg-gray-500 rounded-full"></div>
-            <div className="w-full h-2 bg-gray-600 rounded-full"></div>
-          </div>
-        </div>
-
-        {/* Additional Floating Particles */}
-        {Array.from({ length: 12 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-blue-300 rounded-full opacity-20 animate-pulse"
-            style={{
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${3 + Math.random() * 4}s`
-            }}
-          ></div>
-        ))}
-      </div>
+    <BackgroundLayout>
 
       {/* Main Content */}
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4">
@@ -284,14 +120,8 @@ const Login = () => {
             </button>
           </div>
         </div>
-
-
       </div>
-
-      {/* Additional Gradient Overlays */}
-      <div className="absolute top-0 left-0 w-1/3 h-1/3 bg-gradient-radial from-blue-200/30 to-transparent rounded-full blur-3xl"></div>
-      <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-gradient-radial from-indigo-200/20 to-transparent rounded-full blur-3xl"></div>
-    </div>
+    </BackgroundLayout>
   );
 };
 

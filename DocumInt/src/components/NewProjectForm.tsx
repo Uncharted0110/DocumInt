@@ -26,12 +26,12 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
     if (projectName && selectedFiles.length > 0) {
       // Save PDFs to localStorage before submitting
       const storageKey = `arena_pdfs_${projectName}`;
-      
+
       try {
         // Store the file names in localStorage for persistence
         const fileNames = selectedFiles.map(file => file.name);
         localStorage.setItem(storageKey, JSON.stringify(fileNames));
-        
+
         // Also store file metadata for better tracking (optional)
         const fileMetadata = selectedFiles.map(file => ({
           name: file.name,
@@ -40,13 +40,13 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
           lastModified: file.lastModified
         }));
         localStorage.setItem(`${storageKey}_metadata`, JSON.stringify(fileMetadata));
-        
+
         console.log(`Saved ${selectedFiles.length} PDFs to localStorage for project: ${projectName}`);
       } catch (error) {
         console.error('Error saving PDFs to localStorage:', error);
         // Continue with submission even if localStorage fails
       }
-      
+
       // Call the original onSubmit callback
       onSubmit(projectName, selectedFiles);
     }
@@ -54,6 +54,7 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+
       <div className="bg-white rounded-lg p-6 w-full max-w-xl">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-semibold text-gray-800">New Project</h2>
@@ -82,7 +83,7 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Upload PDFs
             </label>
-            <div 
+            <div
               onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
             >
