@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, AlertCircle, File } from 'lucide-react';
 import { useAdobePDFNavigation } from '../hooks/useAdobePDFNavigation';
+import { extractAndAnalyzePDF } from '../hooks/geminiService'
 
 interface PDFViewerProps {
   pdfFile: File | null;
@@ -23,17 +24,33 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const [isViewerReady, setIsViewerReady] = useState(false);
   const pdfViewerRef = useRef<HTMLDivElement>(null);
   const lastNavigationPageRef = useRef<number | undefined>(undefined);
-  
+
+  // Extract text and analyze with Gemini whenever pdfUrl changes
+  useEffect(() => {
+    if (pdfUrl) {
+      extractAndAnalyzePDF(pdfUrl);
+    }
+  }, [pdfUrl]);
+
   // Use the custom navigation hook
-const { navigateToPage } = useAdobePDFNavigation({
+  const { navigateToPage } = useAdobePDFNavigation({
     pdfViewer,
     containerRef: pdfViewerRef
-});
+  });
 
   useEffect(() => {
     if (isAdobeLoaded && pdfUrl && pdfFileName) {
-      initializePDFViewer();
+      // Force re-initialize viewer by creating a new AdobeDC.View instance
+      if (pdfViewerRef.current) {
+        pdfViewerRef.current.innerHTML = '';
+      }
+      setPdfViewer(null);
+      setIsViewerReady(false);
+      setTimeout(() => {
+        initializePDFViewer();
+      }, 100);
     }
+    // eslint-disable-next-line
   }, [isAdobeLoaded, pdfUrl, pdfFileName]);
 
   // Handle page navigation using the custom hook
@@ -43,15 +60,15 @@ const { navigateToPage } = useAdobePDFNavigation({
     // 2. NavigationPage is defined and >= 0
     // 3. It's different from the last navigation (avoid duplicate navigations)
     if (
-      pdfViewer && 
-      isViewerReady && 
-      navigationPage !== undefined && 
-      navigationPage >= 0 && 
+      pdfViewer &&
+      isViewerReady &&
+      navigationPage !== undefined &&
+      navigationPage >= 0 &&
       navigationPage !== lastNavigationPageRef.current
     ) {
       console.log(`PDFViewer: Received navigation request to page ${navigationPage + 1}`);
       lastNavigationPageRef.current = navigationPage;
-      
+
       // Small delay to ensure the viewer is fully ready
       setTimeout(() => {
         navigateToPage(navigationPage);
@@ -63,7 +80,7 @@ const { navigateToPage } = useAdobePDFNavigation({
     if (!window.AdobeDC || !pdfViewerRef.current) return;
 
     console.log('Initializing Adobe PDF Viewer...');
-    
+
     // Clear previous viewer
     if (pdfViewer) {
       pdfViewerRef.current.innerHTML = '';
@@ -88,7 +105,7 @@ const { navigateToPage } = useAdobePDFNavigation({
       showSearchControl: true,
       enableFormFilling: true,
       enableRedaction: false,
-      defaultViewMode: "FIT_WIDTH", // fit heights
+      defaultViewMode: "FIT_WIDTH", 
       showDisabledSaveButton: false,
       exitPDFViewerType: "CLOSE"
     };
@@ -123,25 +140,25 @@ const { navigateToPage } = useAdobePDFNavigation({
   // Reset navigation tracking when PDF changes
   useEffect(() => {
     lastNavigationPageRef.current = undefined;
-    setIsViewerReady(false);
+    // Don't set isViewerReady here, let initializePDFViewer handle it
   }, [pdfFile]);
 
   return (
     <div className="flex-1 overflow-hidden">
       {pdfFile ? (
         <div className="w-full h-full relative">
-          <div 
+          <div
             id="adobe-dc-view"
             ref={pdfViewerRef}
             className="w-full h-full"
-            style={{ 
-              height: 'calc(93vh - 32px)', 
-              minHeight: '600px', 
-              borderRadius: '16px', 
-              boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)', 
-              overflow: 'hidden', 
-              display: 'flex', 
-              alignItems: 'stretch' 
+            style={{
+              height: 'calc(93vh - 32px)',
+              minHeight: '600px',
+              borderRadius: '16px',
+              boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'stretch'
             }}
           />
           {!isViewerReady && pdfViewer && (
