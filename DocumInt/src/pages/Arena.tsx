@@ -37,17 +37,27 @@ const Arena = () => {
     // PDF state
     const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
     const [pdfUrls, setPdfUrls] = useState<string[]>([]);
-    const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [pdfFileName, setPdfFileName] = useState('');
     const [isAdobeLoaded, setIsAdobeLoaded] = useState(false);
     const [navigationPage, setNavigationPage] = useState<number | undefined>(undefined);
+    const [PdfFile, setPdfFile] = useState<File | null>(null);
 
     // Chat state
     const [chatMessage, setChatMessage] = useState('');
-    const [chatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; }[]>([
-        { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload a PDF to get started, then I can help you analyze it!' }
+    const [chatHistory, setChatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; timestamp: Date; persona?: string; task?: string; results?: any[] }[]>([
+        { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them with persona-based search!', timestamp: new Date() }
     ]);
+
+    // Custom bookmarks state
+    const [customBookmarks, setCustomBookmarks] = useState<Array<{
+        id: string;
+        title: string;
+        page: number;
+        level: "H1" | "H2" | "H3";
+        isCustom: boolean;
+        color?: string;
+    }>>([]);
 
     // Loading state
     const [isLoading, setIsLoading] = useState(true);
@@ -169,7 +179,6 @@ const Arena = () => {
             // Auto-select first PDF if none selected
             const firstPdf = pdfList[0];
             setSelectedPdf(firstPdf);
-            setPdfFile(firstPdf);
             setPdfFileName(firstPdf.name);
             setPdfUrl(urls[0]);
         }
@@ -193,7 +202,6 @@ const Arena = () => {
     const handlePdfSelection = (file: File) => {
         const idx = pdfList.indexOf(file);
         setSelectedPdf(file);
-        setPdfFile(file);
         setPdfFileName(file.name);
         setPdfUrl(pdfUrls[idx]);
         setNavigationPage(undefined); // Reset navigation when switching PDFs
@@ -204,6 +212,63 @@ const Arena = () => {
         setNavigationPage(page);
     };
 
+    const handleAddBookmark = React.useCallback((bookmark: {
+        title: string;
+        page: number;
+        level: "H1" | "H2" | "H3";
+        isCustom: boolean;
+        color?: string;
+    }) => {
+        const newBookmark = {
+            ...bookmark,
+            id: crypto.randomUUID()
+        };
+        setCustomBookmarks(prev => [...prev, newBookmark]);
+        
+        // Optionally save to localStorage or backend
+        try {
+            const saved = localStorage.getItem(`bookmarks-${pdfFileName}`);
+            const existing = saved ? JSON.parse(saved) : [];
+            const updated = [...existing, newBookmark];
+            localStorage.setItem(`bookmarks-${pdfFileName}`, JSON.stringify(updated));
+        } catch (error) {
+            console.warn('Failed to save bookmark:', error);
+        }
+    }, [pdfFileName]);
+
+    const handleDeleteBookmark = React.useCallback((bookmarkId: string) => {
+        setCustomBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+        
+        // Optionally remove from localStorage or backend
+        try {
+            const saved = localStorage.getItem(`bookmarks-${pdfFileName}`);
+            if (saved) {
+                const existing = JSON.parse(saved);
+                const updated = existing.filter((b: any) => b.id !== bookmarkId);
+                localStorage.setItem(`bookmarks-${pdfFileName}`, JSON.stringify(updated));
+            }
+        } catch (error) {
+            console.warn('Failed to delete bookmark:', error);
+        }
+    }, [pdfFileName]);
+
+    // Load custom bookmarks when PDF changes
+    React.useEffect(() => {
+        if (pdfFileName) {
+            try {
+                const saved = localStorage.getItem(`bookmarks-${pdfFileName}`);
+                if (saved) {
+                    const bookmarks = JSON.parse(saved);
+                    setCustomBookmarks(bookmarks);
+                } else {
+                    setCustomBookmarks([]);
+                }
+            } catch (error) {
+                console.warn('Failed to load bookmarks:', error);
+                setCustomBookmarks([]);
+            }
+        }
+    }, [pdfFileName]);
     const toolbarOptions = [
         {
             id: 'pdf',
@@ -518,10 +583,25 @@ const Arena = () => {
                                 chatHistory={chatHistory}
                                 chatMessage={chatMessage}
                                 activeTab={activeTab}
-                                pdfFile={pdfFile}
+                                pdfFiles={files}
                                 onMessageChange={setChatMessage}
-                                onSendMessage={() => { }}
+                                onSendMessage={(message, persona, task, results) => {
+                                    if (message.trim()) {
+                                        const newMessage = {
+                                            id: crypto.randomUUID(),
+                                            type: 'user' as const,
+                                            message,
+                                            timestamp: new Date(),
+                                            persona,
+                                            task,
+                                            results
+                                        };
+                                        setChatHistory(prev => [...prev, newMessage]);
+                                        setChatMessage('');
+                                    }
+                                }}
                                 onTabChange={setActiveTab}
+                                onNavigateToPage={handlePageNavigation}
                             />
                         </div>
                     </div>

@@ -1,45 +1,66 @@
 @import "tailwindcss";
 
-body {
-  font-family: 'Roboto', sans-serif;
+@layer base {
+  body {
+    font-family: 'Roboto', sans-serif;
+  }
+
+  /* Apply Roboto to all text elements for consistency */
+  * {
+    font-family: 'Roboto', sans-serif;
+  }
 }
 
-/* Apply Roboto to all text elements for consistency */
-* {
-  font-family: 'Roboto', sans-serif;
+@layer components {
+  /* Tailwind CSS custom utilities for Roboto font weights */
+  .font-roboto {
+    font-family: 'Roboto', sans-serif;
+  }
+
+  .font-roboto-thin {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 100;
+  }
+
+  .font-roboto-light {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+  }
+
+  .font-roboto-regular {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+  }
+
+  .font-roboto-medium {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+  }
+
+  .font-roboto-bold {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+  }
+
+  .font-roboto-black {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 900;
+  }
 }
 
-/* Tailwind CSS custom utilities for Roboto font weights */
-.font-roboto {
-  font-family: 'Roboto', sans-serif;
-}
+@layer utilities {
+  /* Custom line-clamp utility for chat results */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 
-.font-roboto-thin {
-  font-family: 'Roboto', sans-serif;
-  font-weight: 100;
-}
-
-.font-roboto-light {
-  font-family: 'Roboto', sans-serif;
-  font-weight: 300;
-}
-
-.font-roboto-regular {
-  font-family: 'Roboto', sans-serif;
-  font-weight: 400;
-}
-
-.font-roboto-medium {
-  font-family: 'Roboto', sans-serif;
-  font-weight: 500;
-}
-
-.font-roboto-bold {
-  font-family: 'Roboto', sans-serif;
-  font-weight: 700;
-}
-
-.font-roboto-black {
-  font-family: 'Roboto', sans-serif;
-  font-weight: 900;
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
