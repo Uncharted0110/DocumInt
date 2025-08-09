@@ -14,7 +14,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 # Add the 1B system to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'StartersNSides-1B', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from extract.heading_extractor import PDFHeadingExtractor
 from extract.content_chunker import extract_chunks_with_headings
