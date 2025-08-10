@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from utils.file_utils import current_timestamp
+from src.utils.file_utils import current_timestamp
 
 def format_bm25_output(top_chunks: List[Dict[str, Any]], 
                       input_docs: List[str], 

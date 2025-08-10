@@ -14,7 +14,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<Login />} />
         <Route path="/projects" element={<App />} />
         <Route path="/arena" element={<Arena />} />
-        <Route path="/mindmap" element={<MindMap />} />
+        <Route path="/mindmap" element={<MindMap onClose={() => window.history.back()} />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

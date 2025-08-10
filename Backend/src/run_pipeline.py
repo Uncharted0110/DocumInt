@@ -2,7 +2,7 @@ from extract.heading_extractor import PDFHeadingExtractor
 from extract.content_chunker import extract_chunks_with_headings
 from retrieval.hybrid_retriever import build_hybrid_index, search_top_k_hybrid
 from output.formatter import format_bm25_output
-from utils.file_utils import load_json, save_json, ensure_dir
+from src.utils.file_utils import load_json, save_json, ensure_dir
 from pathlib import Path
 import time
 import argparse

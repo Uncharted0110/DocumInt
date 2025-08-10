@@ -138,5 +138,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 DocumInt/package*.json
+Backend/__pycache__
 Backend/src/__pycache__
 Backend/src/*/__pycache__
