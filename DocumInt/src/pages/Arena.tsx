@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    ChevronLeft, ChevronRight, Brain
+    ChevronLeft, ChevronRight, BrainCircuit
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import PDFViewer from '../components/PDFViewer';
@@ -374,11 +374,12 @@ const Arena = () => {
 
                             <button
                                 onClick={() => setIsMindmapVisible(true)}
-                                className="absolute top-4 right-4 z-30 p-2 hover:bg-gray-100 rounded-full text-[#0a1653] bg-white shadow-lg border border-gray-200 transition-all duration-200 hover:shadow-xl"
+                                className="absolute top-4 -right-90 z-30 p-2 rounded-full text-white bg-[#0a1653] shadow-lg border border-gray-200 transition-all duration-200 hover:shadow-xl hover:bg-[#091240]"
                                 title="Open Mindmap"
                             >
-                                <Brain size={20} />
+                                <BrainCircuit size={20} className="text-white" />
                             </button>
+
 
                             <PDFViewer
                                 pdfFile={selectedPdf}
@@ -418,14 +419,13 @@ const Arena = () => {
                             />
                         </div>
                     </div>
-                    
+
                     {/* Mindmap Overlay */}
                     <div
-                      className={`fixed top-0 left-0 w-full h-full bg-white z-50 transition-transform duration-500 ease-in-out ${
-                        isMindmapVisible ? 'translate-x-0' : 'translate-x-full'
-                      }`}
+                        className={`fixed top-0 left-0 w-full h-full bg-white z-50 transition-transform duration-500 ease-in-out ${isMindmapVisible ? 'translate-x-0' : 'translate-x-full'
+                            }`}
                     >
-                      {isMindmapVisible && <MindMap onClose={() => setIsMindmapVisible(false)} />}
+                        {isMindmapVisible && <MindMap onClose={() => setIsMindmapVisible(false)} />}
                     </div>
                 </div>
             )}
