@@ -27,7 +27,6 @@ const Arena = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // UI state
-    const [activeToolbar, setActiveToolbar] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('quick');
     const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
     const [isOutlineVisible, setIsOutlineVisible] = useState(true);
@@ -42,23 +41,13 @@ const Arena = () => {
     const [pdfFileName, setPdfFileName] = useState('');
     const [isAdobeLoaded, setIsAdobeLoaded] = useState(false);
     const [navigationPage, setNavigationPage] = useState<number | undefined>(undefined);
-    const [PdfFile, setPdfFile] = useState<File | null>(null);
+    const [, setPdfFile] = useState<File | null>(null);
 
     // Chat state
     const [chatMessage, setChatMessage] = useState('');
     const [chatHistory, setChatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; timestamp: Date; persona?: string; task?: string; results?: any[] }[]>([
         { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them with persona-based search!', timestamp: new Date() }
     ]);
-
-    // Custom bookmarks state
-    const [customBookmarks, setCustomBookmarks] = useState<Array<{
-        id: string;
-        title: string;
-        page: number;
-        level: "H1" | "H2" | "H3";
-        isCustom: boolean;
-        color?: string;
-    }>>([]);
 
     // Loading state
     const [isLoading, setIsLoading] = useState(true);
@@ -213,24 +202,6 @@ const Arena = () => {
         setNavigationPage(page);
     };
 
-    // Load custom bookmarks when PDF changes
-    React.useEffect(() => {
-        if (pdfFileName) {
-            try {
-                const saved = localStorage.getItem(`bookmarks-${pdfFileName}`);
-                if (saved) {
-                    const bookmarks = JSON.parse(saved);
-                    setCustomBookmarks(bookmarks);
-                } else {
-                    setCustomBookmarks([]);
-                }
-            } catch (error) {
-                console.warn('Failed to load bookmarks:', error);
-                setCustomBookmarks([]);
-            }
-        }
-    }, [pdfFileName]);
-
     // Add PDF handler
     const handleAddPdf = () => {
         fileInputRef.current?.click();
@@ -312,7 +283,23 @@ const Arena = () => {
 
     // Update the return statement to show loading state
     return (
-        <>
+        <><style jsx global>{`
+                /* Hide scrollbars globally while maintaining scroll functionality */
+                ::-webkit-scrollbar {
+                    display: none;
+                }
+                
+                /* Hide scrollbars for Firefox */
+                * {
+                    scrollbar-width: none;
+                }
+                
+                /* Ensure smooth scrolling */
+                * {
+                    -ms-overflow-style: none;
+                    scroll-behavior: smooth;
+                }
+            `}</style>
             {isLoading ? (
                 <div className="h-screen flex items-center justify-center bg-gray-50">
                     <div className="text-center">

@@ -152,7 +152,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
             ref={pdfViewerRef}
             className="w-full h-full"
             style={{
-              height: 'calc(93vh - 32px)',
+              height: 'calc(100vh)',
               minHeight: '600px',
               borderRadius: '16px',
               boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)',
