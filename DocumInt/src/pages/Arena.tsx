@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    ChevronLeft, ChevronRight, X
+    ChevronLeft, ChevronRight, Brain
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import PDFViewer from '../components/PDFViewer';
 import Chat from '../components/Chat';
 import PDFListSidebar from '../components/PDFListSidebar';
 import PDFOutlineSidebar from '../components/PDFOutlineSidebar';
+import MindMap from '../components/Mindmap';
 
 // Extend window type to include AdobeDC
 declare global {
@@ -30,9 +31,7 @@ const Arena = () => {
     const [activeTab, setActiveTab] = useState('quick');
     const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
     const [isOutlineVisible, setIsOutlineVisible] = useState(true);
-
-    // NEW: State for responsive sidebars
-    const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+    const [isMindmapVisible, setIsMindmapVisible] = useState(false);
 
     // PDF state
     const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
@@ -308,7 +307,7 @@ const Arena = () => {
                     </div>
                 </div>
             ) : (
-                <div className="h-screen bg-gray-50 flex flex-col">
+                <div className="h-screen bg-gray-50 flex flex-col relative overflow-hidden">
                     {/* Hidden file input */}
                     <input
                         type="file"
@@ -373,6 +372,14 @@ const Arena = () => {
                                 </button>
                             )}
 
+                            <button
+                                onClick={() => setIsMindmapVisible(true)}
+                                className="absolute top-4 right-4 z-30 p-2 hover:bg-gray-100 rounded-full text-[#0a1653] bg-white shadow-lg border border-gray-200 transition-all duration-200 hover:shadow-xl"
+                                title="Open Mindmap"
+                            >
+                                <Brain size={20} />
+                            </button>
+
                             <PDFViewer
                                 pdfFile={selectedPdf}
                                 pdfUrl={pdfUrl}
@@ -384,18 +391,7 @@ const Arena = () => {
                         </div>
 
                         {/* Chat Panel */}
-                        <div className={`
-                            bg-white border-l border-gray-200 flex flex-col
-                            fixed top-0 right-0 h-full w-96 z-40 transition-transform duration-300 ease-in-out
-                            lg:static lg:w-96 lg:z-auto lg:translate-x-0
-                            ${isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
-                        `}>
-                            <div className="p-4 border-b flex items-center justify-between lg:hidden">
-                                <h3 className="font-semibold">Chat & Analysis</h3>
-                                <button onClick={() => setIsRightSidebarOpen(false)} className="p-1 hover:bg-gray-200 rounded-full">
-                                    <X size={20} />
-                                </button>
-                            </div>
+                        <div className={`lg:static lg:w-96 lg:z-auto lg:translate-x-0`}>
                             <Chat
                                 chatHistory={chatHistory}
                                 chatMessage={chatMessage}
@@ -421,6 +417,15 @@ const Arena = () => {
                                 onNavigateToPage={handlePageNavigation}
                             />
                         </div>
+                    </div>
+                    
+                    {/* Mindmap Overlay */}
+                    <div
+                      className={`fixed top-0 left-0 w-full h-full bg-white z-50 transition-transform duration-500 ease-in-out ${
+                        isMindmapVisible ? 'translate-x-0' : 'translate-x-full'
+                      }`}
+                    >
+                      {isMindmapVisible && <MindMap onClose={() => setIsMindmapVisible(false)} />}
                     </div>
                 </div>
             )}
