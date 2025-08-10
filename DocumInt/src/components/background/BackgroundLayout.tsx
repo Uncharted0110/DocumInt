@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import AnimatedBackground from './AnimatedBackground';
 import GradientOverlays from './GradientOverlays';
 

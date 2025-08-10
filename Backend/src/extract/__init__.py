@@ -1,1 +1,3 @@
-# Nothing to see here LOL
+from .heading_extractor import PDFHeadingExtractor
+
+__all__ = ['PDFHeadingExtractor']

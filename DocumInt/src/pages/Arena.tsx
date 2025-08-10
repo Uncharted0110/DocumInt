@@ -282,7 +282,8 @@ const Arena = () => {
 
     // Update the return statement to show loading state
     return (
-        <><style jsx global>{`
+        <>
+            <style>{`
                 /* Hide scrollbars globally while maintaining scroll functionality */
                 ::-webkit-scrollbar {
                     display: none;
