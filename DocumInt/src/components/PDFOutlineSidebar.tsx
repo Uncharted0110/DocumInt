@@ -240,65 +240,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
   return (
     <div className={`bg-white border-r border-gray-200 flex flex-col ${className}`}>
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-800">Document Outline</h3>
-          <div className="flex items-center space-x-2">
-            {onAddBookmark && (
-              <button
-                onClick={() => setShowBookmarkForm(!showBookmarkForm)}
-                className="p-1 hover:bg-gray-100 rounded text-blue-600"
-                title="Add Bookmark"
-              >
-                <Plus size={16} />
-              </button>
-            )}
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1 hover:bg-gray-100 rounded"
-            >
-              {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-            </button>
-          </div>
-        </div>
-        {outlineData?.title && !isCollapsed && (
-          <p className="text-xs text-gray-600 mt-1 truncate" title={outlineData.title}>
-            {outlineData.title}
-          </p>
-        )}
-        
-        {/* Bookmark Form */}
-        {showBookmarkForm && !isCollapsed && (
-          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-            <h4 className="text-xs font-medium text-gray-700 mb-2">Add Custom Bookmark</h4>
-            <input
-              type="text"
-              value={newBookmarkTitle}
-              onChange={(e) => setNewBookmarkTitle(e.target.value)}
-              placeholder={`Bookmark for page ${currentPage}`}
-              className="w-full text-xs border rounded px-2 py-1 mb-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              onKeyDown={(e) => e.key === 'Enter' && handleAddBookmark()}
-            />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => {
-                  setShowBookmarkForm(false);
-                  setNewBookmarkTitle('');
-                }}
-                className="text-xs text-gray-500 hover:text-gray-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddBookmark}
-                className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      
 
       {/* Content */}
       {!isCollapsed && (

@@ -12,15 +12,11 @@ from pdf_extractor import PDFOutlineExtractor
 from typing import List, Dict, Any
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-
-# Add the 1B system to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
-
-from extract.heading_extractor import PDFHeadingExtractor
-from extract.content_chunker import extract_chunks_with_headings
-from retrieval.hybrid_retriever import build_hybrid_index, search_top_k_hybrid
-from output.formatter import format_bm25_output
-from utils.file_utils import load_json, save_json, ensure_dir
+from src.extract import PDFHeadingExtractor
+from src.extract.content_chunker import extract_chunks_with_headings
+from src.retrieval.hybrid_retriever import build_hybrid_index, search_top_k_hybrid
+from src.output.formatter import format_bm25_output
+from src.utils.file_utils import load_json, save_json, ensure_dir
 
 app = FastAPI()
 

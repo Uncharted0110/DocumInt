@@ -26,6 +26,8 @@ interface ChatProps {
   chatMessage: string;
   activeTab: string;
   pdfFiles: File[];
+  initialPersona?: string;
+  initialTask?: string;
   onMessageChange: (message: string) => void;
   onSendMessage: (message: string, persona?: string, task?: string, results?: QueryResult[]) => void;
   onTabChange: (tab: string) => void;
@@ -37,6 +39,8 @@ const Chat: React.FC<ChatProps> = ({
   chatMessage,
   activeTab,
   pdfFiles,
+  initialPersona,
+  initialTask,
   onMessageChange,
   onSendMessage,
   onTabChange,
@@ -45,8 +49,8 @@ const Chat: React.FC<ChatProps> = ({
   const [isOpen, setIsOpen] = useState(true);
   const [cacheKey, setCacheKey] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [persona, setPersona] = useState('');
-  const [task, setTask] = useState('');
+  const [persona, setPersona] = useState(initialPersona || '');
+  const [task, setTask] = useState(initialTask || '');
 
   // Cache PDFs when they change
   useEffect(() => {
@@ -152,9 +156,9 @@ const Chat: React.FC<ChatProps> = ({
     <>
       {/* Chat Container - Fixed positioned for floating effect */}
       <div
-        className={`fixed top-18 right-2 z-50 bg-white rounded-lg shadow-2xl border border-gray-200 transition-transform duration-300 ease-in-out ${isOpen ? 'transform translate-x-0' : 'transform translate-x-80'
+        className={`fixed top-2 right-2 z-50 bg-white rounded-lg shadow-2xl border border-gray-200 transition-transform duration-300 ease-in-out ${isOpen ? 'transform translate-x-0' : 'transform translate-x-80'
           }`}
-        style={{ width: '356px', height: '625px' }}
+        style={{ width: '356px', height: '565px' }}
       >
         {/* Chat Header with Toggle Button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">

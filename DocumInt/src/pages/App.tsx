@@ -8,9 +8,9 @@ const App = () => {
   const navigate = useNavigate();
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
 
-  const handleCreateProject = (name: string, files: File[]) => {
-    console.log('Creating project:', { name, files });
-    navigate('/arena', { state: { projectName: name, files } });
+  const handleCreateProject = (name: string, files: File[], persona?: string, task?: string) => {
+    console.log('Creating project:', { name, files, persona, task });
+    navigate('/arena', { state: { projectName: name, files, persona, task } });
   };
 
   return (

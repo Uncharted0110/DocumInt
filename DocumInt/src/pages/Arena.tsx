@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    FileText, Plus, Trash2, Edit3, Download, Upload, RefreshCw,
-    Brain, Zap, Eye, Copy, Settings, Share2, Bookmark, Search, ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, X
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import ToolBar from '../components/ToolBar';
 import PDFViewer from '../components/PDFViewer';
 import Chat from '../components/Chat';
 import PDFListSidebar from '../components/PDFListSidebar';
@@ -33,6 +31,9 @@ const Arena = () => {
     const [activeTab, setActiveTab] = useState('quick');
     const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
     const [isOutlineVisible, setIsOutlineVisible] = useState(true);
+
+    // NEW: State for responsive sidebars
+    const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
 
     // PDF state
     const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
@@ -212,46 +213,6 @@ const Arena = () => {
         setNavigationPage(page);
     };
 
-    const handleAddBookmark = React.useCallback((bookmark: {
-        title: string;
-        page: number;
-        level: "H1" | "H2" | "H3";
-        isCustom: boolean;
-        color?: string;
-    }) => {
-        const newBookmark = {
-            ...bookmark,
-            id: crypto.randomUUID()
-        };
-        setCustomBookmarks(prev => [...prev, newBookmark]);
-        
-        // Optionally save to localStorage or backend
-        try {
-            const saved = localStorage.getItem(`bookmarks-${pdfFileName}`);
-            const existing = saved ? JSON.parse(saved) : [];
-            const updated = [...existing, newBookmark];
-            localStorage.setItem(`bookmarks-${pdfFileName}`, JSON.stringify(updated));
-        } catch (error) {
-            console.warn('Failed to save bookmark:', error);
-        }
-    }, [pdfFileName]);
-
-    const handleDeleteBookmark = React.useCallback((bookmarkId: string) => {
-        setCustomBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
-        
-        // Optionally remove from localStorage or backend
-        try {
-            const saved = localStorage.getItem(`bookmarks-${pdfFileName}`);
-            if (saved) {
-                const existing = JSON.parse(saved);
-                const updated = existing.filter((b: any) => b.id !== bookmarkId);
-                localStorage.setItem(`bookmarks-${pdfFileName}`, JSON.stringify(updated));
-            }
-        } catch (error) {
-            console.warn('Failed to delete bookmark:', error);
-        }
-    }, [pdfFileName]);
-
     // Load custom bookmarks when PDF changes
     React.useEffect(() => {
         if (pdfFileName) {
@@ -269,78 +230,6 @@ const Arena = () => {
             }
         }
     }, [pdfFileName]);
-    const toolbarOptions = [
-        {
-            id: 'pdf',
-            title: 'PDF',
-            icon: <FileText size={20} />,
-            actions: [
-                { id: 'add-pdf', icon: <Plus size={18} />, title: 'Add PDF', desc: 'Upload new PDF' },
-                { id: 'delete-pdf', icon: <Trash2 size={18} />, title: 'Delete PDF', desc: 'Remove current PDF' },
-                { id: 'download-pdf', icon: <Download size={18} />, title: 'Download PDF', desc: 'Save PDF locally' }
-            ]
-        },
-        {
-            id: 'mindmap',
-            title: 'Mindmap',
-            icon: <Brain size={20} />,
-            actions: [
-                { id: 'create-mindmap', icon: <Plus size={18} />, title: 'Create Mindmap', desc: 'Generate mindmap from document' },
-                { id: 'view-mindmap', icon: <Eye size={18} />, title: 'View Mindmap', desc: 'Open existing mindmap' },
-                { id: 'export-mindmap', icon: <Download size={18} />, title: 'Export Mindmap', desc: 'Save mindmap as image' }
-            ]
-        },
-        {
-            id: 'conversion',
-            title: 'Conversion',
-            icon: <RefreshCw size={20} />,
-            actions: [
-                { id: 'to-word', icon: <Upload size={18} />, title: 'To Word', desc: 'Convert to DOCX format' },
-                { id: 'to-text', icon: <Copy size={18} />, title: 'To Text', desc: 'Extract plain text' },
-                { id: 'to-html', icon: <Edit3 size={18} />, title: 'To HTML', desc: 'Convert to web format' }
-            ]
-        },
-        {
-            id: 'summary',
-            title: 'Summary',
-            icon: <Zap size={20} />,
-            actions: [
-                { id: 'generate-summary', icon: <Plus size={18} />, title: 'Generate Summary', desc: 'AI-powered summary' },
-                { id: 'key-points', icon: <Eye size={18} />, title: 'Key Points', desc: 'Extract main points' },
-                { id: 'export-summary', icon: <Download size={18} />, title: 'Export Summary', desc: 'Save summary as document' }
-            ]
-        },
-        {
-            id: 'search',
-            title: 'Search',
-            icon: <Search size={20} />,
-            actions: [
-                { id: 'full-text-search', icon: <Search size={18} />, title: 'Full Text Search', desc: 'Search through entire document' },
-                { id: 'semantic-search', icon: <Brain size={18} />, title: 'Semantic Search', desc: 'AI-powered content search' },
-                { id: 'bookmarks', icon: <Bookmark size={18} />, title: 'Bookmarks', desc: 'Manage document bookmarks' }
-            ]
-        },
-        {
-            id: 'sharing',
-            title: 'Share',
-            icon: <Share2 size={20} />,
-            actions: [
-                { id: 'share-link', icon: <Share2 size={18} />, title: 'Share Link', desc: 'Generate shareable link' },
-                { id: 'export-share', icon: <Download size={18} />, title: 'Export & Share', desc: 'Export and share document' },
-                { id: 'collaborate', icon: <Eye size={18} />, title: 'Collaborate', desc: 'Enable collaborative editing' }
-            ]
-        },
-        {
-            id: 'settings',
-            title: 'Settings',
-            icon: <Settings size={20} />,
-            actions: [
-                { id: 'preferences', icon: <Settings size={18} />, title: 'Preferences', desc: 'Configure app settings' },
-                { id: 'themes', icon: <Eye size={18} />, title: 'Themes', desc: 'Change app appearance' },
-                { id: 'shortcuts', icon: <Plus size={18} />, title: 'Shortcuts', desc: 'View keyboard shortcuts' }
-            ]
-        }
-    ];
 
     // Add PDF handler
     const handleAddPdf = () => {
@@ -386,67 +275,6 @@ const Arena = () => {
 
         // Reset input so the same files can be chosen again later
         event.target.value = '';
-    };
-
-
-
-    // Improved Delete PDF handler
-    const handleDeletePdf = () => {
-        if (!selectedPdf || pdfList.length === 0) return;
-
-        const currentIndex = pdfList.indexOf(selectedPdf);
-        if (currentIndex === -1) return;
-
-        const newList = pdfList.filter((_, i) => i !== currentIndex);
-        setPdfList(newList);
-
-        if (newList.length === 0) {
-            // No PDFs left
-            setSelectedPdf(null);
-            setPdfFile(null);
-            setPdfFileName('');
-            setPdfUrl(null);
-        } else {
-            // Select the next PDF or previous if it was the last one
-            let newSelectedIndex;
-            if (currentIndex < newList.length) {
-                // Select the next PDF (same index in new array)
-                newSelectedIndex = currentIndex;
-            } else {
-                // Select the previous PDF (last PDF was deleted)
-                newSelectedIndex = newList.length - 1;
-            }
-
-            const newSelectedPdf = newList[newSelectedIndex];
-            setSelectedPdf(newSelectedPdf);
-            setPdfFile(newSelectedPdf);
-            setPdfFileName(newSelectedPdf.name);
-            setNavigationPage(undefined);
-        }
-    };
-
-    // Download PDF handler
-    const handleDownloadPdf = () => {
-        if (!selectedPdf) return;
-        const idx = pdfList.indexOf(selectedPdf);
-        const url = pdfUrls[idx];
-        if (url) {
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = selectedPdf.name;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    };
-
-    // Toolbar action dispatcher
-    const handleToolbarAction = (actionId: string, toolId: string) => {
-        if (toolId === 'pdf') {
-            if (actionId === 'add-pdf') handleAddPdf();
-            if (actionId === 'delete-pdf') handleDeletePdf();
-            if (actionId === 'download-pdf') handleDownloadPdf();
-        }
     };
 
     // Improved Remove PDF from sidebar
@@ -502,15 +330,6 @@ const Arena = () => {
                         ref={fileInputRef}
                         style={{ display: 'none' }}
                         onChange={handleFileUpload}
-                    />
-
-                    {/* Top Header Toolbar */}
-                    <ToolBar
-                        toolbarOptions={toolbarOptions}
-                        activeToolbar={activeToolbar}
-                        onToggleToolbar={(toolId: string) => setActiveToolbar(activeToolbar === toolId ? null : toolId)}
-                        onCloseToolbar={() => setActiveToolbar(null)}
-                        onActionClick={handleToolbarAction}
                     />
 
                     {/* Main Content Layout */}
@@ -578,7 +397,18 @@ const Arena = () => {
                         </div>
 
                         {/* Chat Panel */}
-                        <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
+                        <div className={`
+                            bg-white border-l border-gray-200 flex flex-col
+                            fixed top-0 right-0 h-full w-96 z-40 transition-transform duration-300 ease-in-out
+                            lg:static lg:w-96 lg:z-auto lg:translate-x-0
+                            ${isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+                        `}>
+                            <div className="p-4 border-b flex items-center justify-between lg:hidden">
+                                <h3 className="font-semibold">Chat & Analysis</h3>
+                                <button onClick={() => setIsRightSidebarOpen(false)} className="p-1 hover:bg-gray-200 rounded-full">
+                                    <X size={20} />
+                                </button>
+                            </div>
                             <Chat
                                 chatHistory={chatHistory}
                                 chatMessage={chatMessage}

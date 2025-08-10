@@ -3,12 +3,14 @@ import { FileText, Upload, X } from 'lucide-react';
 
 interface NewProjectFormProps {
   onClose: () => void;
-  onSubmit: (name: string, files: File[]) => void;
+  onSubmit: (name: string, files: File[], persona?: string, task?: string) => void;
 }
 
 const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) => {
   const [projectName, setProjectName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [persona, setPersona] = useState('');
+  const [task, setTask] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,7 +50,7 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
       }
 
       // Call the original onSubmit callback
-      onSubmit(projectName, selectedFiles);
+      onSubmit(projectName, selectedFiles, persona, task);
     }
   };
 
@@ -77,6 +79,37 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
               placeholder="Enter project name"
               required
             />
+          </div>
+
+          <div className="mb-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="persona" className="block text-sm font-medium text-gray-700 mb-2">
+                  Persona
+                </label>
+                <input
+                  id="persona"
+                  type="text"
+                  value={persona}
+                  onChange={(e) => setPersona(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Student, Researcher"
+                />
+              </div>
+              <div>
+                <label htmlFor="task" className="block text-sm font-medium text-gray-700 mb-2">
+                  Task
+                </label>
+                <input
+                  id="task"
+                  type="text"
+                  value={task}
+                  onChange={(e) => setTask(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Research, Analysis"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="mb-6">
