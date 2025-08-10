@@ -20,7 +20,9 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   onFileUpload,
   navigationPage
 }) => {
-  const [pdfViewer, setPdfViewer] = useState<any>(null);
+  const [view, setView] = useState<any>(null);
+  const [viewer, setViewer] = useState<any>(null);
+  const [apis, setApis] = useState<any>(null);
   const [isViewerReady, setIsViewerReady] = useState(false);
   const pdfViewerRef = useRef<HTMLDivElement>(null);
   const lastNavigationPageRef = useRef<number | undefined>(undefined);
@@ -34,17 +36,25 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
 
   // Use the custom navigation hook
   const { navigateToPage } = useAdobePDFNavigation({
-    pdfViewer,
+    view,
+    viewer,
+    apis,
     containerRef: pdfViewerRef
   });
 
+  // Consider the viewer ready as soon as APIs are available (unblocks UI banner)
+  useEffect(() => {
+    if (apis && !isViewerReady) setIsViewerReady(true);
+  }, [apis, isViewerReady]);
+
   useEffect(() => {
     if (isAdobeLoaded && pdfUrl && pdfFileName) {
-      // Force re-initialize viewer by creating a new AdobeDC.View instance
       if (pdfViewerRef.current) {
         pdfViewerRef.current.innerHTML = '';
       }
-      setPdfViewer(null);
+      setView(null);
+      setViewer(null);
+      setApis(null);
       setIsViewerReady(false);
       setTimeout(() => {
         initializePDFViewer();
@@ -55,34 +65,25 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
 
   // Handle page navigation using the custom hook
   useEffect(() => {
-    // Only navigate if:
-    // 1. We have a viewer
-    // 2. NavigationPage is defined and >= 0
-    // 3. It's different from the last navigation (avoid duplicate navigations)
     if (
-      pdfViewer &&
-      isViewerReady &&
+      viewer &&
       navigationPage !== undefined &&
       navigationPage >= 0 &&
       navigationPage !== lastNavigationPageRef.current
     ) {
       console.log(`PDFViewer: Received navigation request to page ${navigationPage + 1}`);
       lastNavigationPageRef.current = navigationPage;
-
-      // Small delay to ensure the viewer is fully ready
-      setTimeout(() => {
-        navigateToPage(navigationPage);
-      }, 100);
+      // Call immediately; hook will queue if not ready yet
+      navigateToPage(navigationPage);
     }
-  }, [pdfViewer, isViewerReady, navigationPage, navigateToPage]);
+  }, [viewer, navigationPage, navigateToPage]);
 
   const initializePDFViewer = () => {
     if (!window.AdobeDC || !pdfViewerRef.current) return;
 
     console.log('Initializing Adobe PDF Viewer...');
 
-    // Clear previous viewer
-    if (pdfViewer) {
+    if (view) {
       pdfViewerRef.current.innerHTML = '';
       setIsViewerReady(false);
     }
@@ -108,39 +109,73 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       defaultViewMode: "FIT_WIDTH", 
       showDisabledSaveButton: false,
       exitPDFViewerType: "CLOSE"
-    };
+    } as const;
 
-    adobeDCView.previewFile({
-      content: { location: { url: pdfUrl } },
-      metaData: { fileName: pdfFileName }
-    }, previewConfig);
+    setView(adobeDCView);
 
-    // Listen for viewer ready state
+    // Register events on View
     try {
-      adobeDCView.registerCallback(
-        window.AdobeDC.View.Enum.CallbackType.EVENT_LISTENER,
-        (event: any) => {
-          console.log('Adobe Viewer Event:', event.type);
-          if (event.type === "APP_RENDERING_DONE" || event.type === "DOCUMENT_OPEN") {
-            console.log('Adobe PDF Viewer is ready for navigation');
-            setIsViewerReady(true);
-          }
-        }
-      );
+      const CallbackType = (window as any)?.AdobeDC?.View?.Enum?.CallbackType;
+      if (CallbackType?.EVENT_LISTENER) {
+        adobeDCView.registerCallback(
+          CallbackType.EVENT_LISTENER,
+          (event: any) => {
+            console.log('Adobe Viewer Event:', event.type);
+            if (
+              event.type === 'APP_RENDERING_DONE' ||
+              event.type === 'DOCUMENT_OPEN' ||
+              event.type === 'FIRST_AJS_PAGE_RENDERED' ||
+              event.type === 'PDF_VIEWER_OPEN' ||
+              event.type === 'APP_RENDERING_START' ||
+              event.type === 'PDF_VIEWER_READY'
+            ) {
+              setIsViewerReady(true);
+            }
+          },
+          { enablePDFAnalytics: false }
+        );
+      }
+
+      // Stub feature-flag queries
+      if (CallbackType?.GET_FEATURE_FLAG) {
+        adobeDCView.registerCallback(
+          CallbackType.GET_FEATURE_FLAG,
+          (_flagName: string) => false
+        );
+      }
     } catch (error) {
       console.warn('Could not register viewer events, assuming ready after delay', error);
-      // Fallback: assume ready after a delay
       setTimeout(() => setIsViewerReady(true), 2000);
     }
 
-    // Set up the viewer for navigation
-    setPdfViewer(adobeDCView);
+    // previewFile returns a promise that resolves with a viewer instance
+    adobeDCView
+      .previewFile({
+        content: { location: { url: pdfUrl } },
+        metaData: { fileName: pdfFileName }
+      }, previewConfig)
+      .then((theViewer: any) => {
+        setViewer(theViewer);
+        // Attempt to get APIs immediately
+        try {
+          const getter = theViewer?.getAPIs;
+          if (typeof getter === 'function') {
+            getter.call(theViewer)
+              .then((vApis: any) => {
+                setApis(vApis);
+                setIsViewerReady(true); // mark ready when APIs available
+              })
+              .catch(() => { /* ignore */ });
+          }
+        } catch { /* ignore */ }
+      })
+      .catch((e: any) => {
+        console.error('previewFile failed:', e);
+      });
   };
 
-  // Reset navigation tracking when PDF changes
   useEffect(() => {
     lastNavigationPageRef.current = undefined;
-    // Don't set isViewerReady here, let initializePDFViewer handle it
   }, [pdfFile]);
 
   return (
@@ -161,7 +196,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
               alignItems: 'stretch'
             }}
           />
-          {!isViewerReady && pdfViewer && (
+          {!isViewerReady && viewer && (
             <div className="absolute top-4 right-4 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-sm">
               Preparing navigation...
             </div>
