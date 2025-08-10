@@ -117,6 +117,7 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
     // Zoom behavior
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
+      .filter((event) => event.type === "wheel") // disable drag pan; allow wheel zoom only
       .scaleExtent([0.5, 2])
       .on("zoom", (event) => {
         zoomKRef.current = event.transform.k;
@@ -127,6 +128,7 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
     zoomBehaviorRef.current = zoomBehavior;
     svg.call(zoomBehavior as any);
     svg.on("dblclick.zoom", null);
+    svg.style("cursor", "default");
 
     // Arrowhead
     const defs = svg.append("defs");
@@ -225,7 +227,7 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
         const parentPos = d.parent ? newPos[d.parent.data.id] : newPos[d.data.id];
         return `translate(${parentPos.x},${parentPos.y})`;
       })
-      .style("cursor", (d: any) => (d.depth === 0 ? "default" : "move"));
+      .style("cursor", "move");
 
     const rectWidth = 160;
     const rectHeight = 48;
@@ -304,13 +306,11 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
     // Drag behavior (zoom-aware, thresholded) for non-root nodes
     const dragBehavior = d3
       .drag<SVGGElement, any>()
-      .on("start", (_event, d) => {
-        if (d.depth === 0) return;
+      .on("start", (_event, _d) => {
         isDraggingRef.current = false;
         dragDistRef.current = 0;
       })
       .on("drag", (event, d) => {
-        if (d.depth === 0) return;
         const k = zoomKRef.current || 1;
         const dx = (event.dx || 0) / k;
         const dy = (event.dy || 0) / k;
@@ -576,7 +576,7 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
             </div>
 
             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-              💡 Tips: Double-click to edit • Right-click to delete • Scroll to zoom • Drag background to pan
+              💡 Tips: Double-click to edit • Right-click to delete • Use mouse wheel or +/− to zoom
             </div>
           </>
         )}
