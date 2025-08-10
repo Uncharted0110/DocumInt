@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Send, MessageCircle, X, ChevronLeft, Star, Clock, User, Target } from 'lucide-react';
+import { Send, MessageCircle, X, ChevronUp, Star, Clock, User, Target } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -156,30 +156,32 @@ const Chat: React.FC<ChatProps> = ({
     <>
       {/* Chat Container - Fixed positioned for floating effect */}
       <div
-        className={`fixed top-2 right-2 z-50 bg-white rounded-lg shadow-2xl border border-gray-200 transition-transform duration-300 ease-in-out ${isOpen ? 'transform translate-x-0' : 'transform translate-x-80'
+        className={`fixed top-100 right-3 z-50 bg-white rounded-lg shadow-2xl border border-gray-200 transition-transform duration-300 ease-in-out ${isOpen ? 'transform -translate-y-80' : 'transform translate-y-70'
           }`}
         style={{ width: '356px', height: '565px' }}
       >
         {/* Chat Header with Toggle Button */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
+          
+          <h3 className="font-semibold text-gray-800 flex items-center">
+            <MessageCircle size={20} className="mr-2 text-blue-600" />
+            PDF Assistant
+          </h3>
           {!isOpen ? (
             <button
               onClick={toggleChat}
               className="p-1 hover:bg-white rounded-full transition-colors"
             >
-              <ChevronLeft size={18} className="text-gray-500 hover:text-gray-700" />
+              <ChevronUp size={18} className="text-gray-500 hover:text-gray-700" />
             </button>
-          ) : null}
-          <h3 className="font-semibold text-gray-800 flex items-center">
-            <MessageCircle size={20} className="mr-2 text-blue-600" />
-            PDF Assistant
-          </h3>
-          <button
+          ) : <button
             onClick={toggleChat}
             className="p-1 hover:bg-white rounded-full transition-colors"
           >
             <X size={18} className="text-gray-500 hover:text-gray-700" />
-          </button>
+          </button>}
+          
+          
         </div>
 
         {/* Chat Tabs */}
