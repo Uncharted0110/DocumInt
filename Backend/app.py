@@ -268,6 +268,240 @@ async def get_cache_status(cache_key: str):
     else:
         return {"ready": False}
 
+@app.post("/analyze-chunks-with-gemini")
+async def analyze_chunks_with_gemini(
+    cache_key: str = Form(...),
+    persona: str = Form(...),
+    task: str = Form(...),
+    k: int = Form(default=5),
+    gemini_api_key: str = Form(...),
+    analysis_prompt: str = Form(default="Analyze this document section and provide key insights, important facts, and connections to the user's task."),
+    max_chunks_to_analyze: int = Form(default=3),
+    gemini_model: str = Form(default="gemini-2.5-flash")
+):
+    """
+    Query cached PDFs, get top chunks, and analyze them with Gemini AI
+    """
+    try:
+        # First, get the top chunks using existing retrieval logic
+        if cache_key not in pdf_cache:
+            raise HTTPException(status_code=404, detail="Cache key not found. Please upload PDFs first.")
+        
+        cached_data = pdf_cache[cache_key]
+        retriever = cached_data["retriever"]
+        chunks = cached_data["chunks"]
+        
+        print(f"🔍 Querying with persona: {persona}, task: {task}")
+        print(f"📊 Found {len(chunks)} chunks in cache")
+        
+        # Get top chunks using hybrid retrieval
+        query = f"{persona} {task}"
+        print(f"🔍 Searching with query: '{query}'")
+        
+        try:
+            top_chunks = search_top_k_hybrid(retriever, query, persona=persona, task=task, k=k)
+            print(f"✅ Found {len(top_chunks)} top chunks")
+        except Exception as search_error:
+            print(f"❌ Search error: {str(search_error)}")
+            raise HTTPException(status_code=500, detail=f"Search error: {str(search_error)}")
+        
+        # Prepare chunks for Gemini analysis
+        chunks_to_analyze = top_chunks[:max_chunks_to_analyze]
+        gemini_results = []
+        
+        print(f"🤖 Starting Gemini analysis of {len(chunks_to_analyze)} chunks...")
+        
+        # Process each chunk with Gemini
+        for i, chunk in enumerate(chunks_to_analyze):
+            try:
+                chunk_content = chunk.get('content', chunk.get('text', ''))
+                chunk_heading = chunk.get('heading', 'No heading')
+                pdf_name = chunk.get('pdf_name', 'Unknown')
+                
+                # Create context-aware prompt
+                contextual_prompt = f"""
+You are analyzing a document section for a user with the following context:
+- User Persona: {persona}
+- User Task: {task}
+- Document: {pdf_name}
+- Section: {chunk_heading}
+
+{analysis_prompt}
+
+Please provide insights that are specifically relevant to this user's persona and task.
+
+Document Section:
+{chunk_content}
+"""
+                
+                print(f"🔍 Analyzing chunk {i+1}/{len(chunks_to_analyze)} with Gemini...")
+                
+                # Call Gemini API
+                gemini_response = await call_gemini_api(
+                    prompt=contextual_prompt,
+                    api_key=gemini_api_key,
+                    model=gemini_model
+                )
+                
+                gemini_result = {
+                    "chunk_index": i,
+                    "document": pdf_name,
+                    "section_title": chunk_heading,
+                    "page_number": chunk.get('page_number', 1),
+                    "original_content": chunk_content,
+                    "retrieval_scores": {
+                        "hybrid_score": chunk.get('hybrid_score', 0),
+                        "bm25_score": chunk.get('bm25_score', 0),
+                        "embedding_score": chunk.get('embedding_score', 0)
+                    },
+                    "gemini_analysis": gemini_response,
+                    "analysis_timestamp": asyncio.get_event_loop().time()
+                }
+                
+                gemini_results.append(gemini_result)
+                
+                # Add delay between API calls to respect rate limits
+                if i < len(chunks_to_analyze) - 1:
+                    await asyncio.sleep(1)  # 1 second delay between calls
+                    
+            except Exception as chunk_error:
+                print(f"❌ Error analyzing chunk {i+1}: {str(chunk_error)}")
+                # Add error result to maintain indexing
+                gemini_results.append({
+                    "chunk_index": i,
+                    "document": chunk.get('pdf_name', 'Unknown'),
+                    "section_title": chunk.get('heading', 'No heading'),
+                    "page_number": chunk.get('page_number', 1),
+                    "original_content": chunk.get('content', chunk.get('text', '')),
+                    "retrieval_scores": {
+                        "hybrid_score": chunk.get('hybrid_score', 0),
+                        "bm25_score": chunk.get('bm25_score', 0),
+                        "embedding_score": chunk.get('embedding_score', 0)
+                    },
+                    "gemini_analysis": f"Error analyzing this chunk: {str(chunk_error)}",
+                    "analysis_timestamp": asyncio.get_event_loop().time(),
+                    "error": True
+                })
+                continue
+        
+        print(f"✅ Gemini analysis complete. Processed {len(gemini_results)} chunks")
+        
+        # Return comprehensive results
+        return {
+            "metadata": {
+                "input_documents": cached_data["pdf_files"],
+                "persona": persona,
+                "job_to_be_done": task,
+                "domain": cached_data["domain"],
+                "total_chunks_found": len(top_chunks),
+                "chunks_analyzed": len(chunks_to_analyze),
+                "gemini_model": gemini_model
+            },
+            "retrieval_results": [
+                {
+                    "document": chunk.get('pdf_name', 'Unknown'),
+                    "section_title": chunk.get('heading', 'No heading'),
+                    "content": chunk.get('content', chunk.get('text', 'No content')),
+                    "page_number": chunk.get('page_number', 1),
+                    "hybrid_score": chunk.get('hybrid_score', 0),
+                    "bm25_score": chunk.get('bm25_score', 0),
+                    "embedding_score": chunk.get('embedding_score', 0)
+                }
+                for chunk in top_chunks
+            ],
+            "gemini_analysis": gemini_results,
+            "summary": {
+                "top_insights": [result["gemini_analysis"][:200] + "..." if len(result["gemini_analysis"]) > 200 else result["gemini_analysis"] for result in gemini_results if not result.get("error", False)]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error analyzing chunks with Gemini: {str(e)}")
+
+
+async def call_gemini_api(prompt: str, api_key: str, model: str = "gemini-2.0-flash-exp") -> str:
+    """
+    Call the Gemini API to analyze text
+    """
+    import httpx
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.7,
+            "topK": 40,
+            "topP": 0.95,
+            "maxOutputTokens": 8192,
+        },
+        "safetySettings": [
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH", 
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            }
+        ]
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                url,
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if not response.is_success:
+                error_text = await response.aread()
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Gemini API error: {response.status_code} - {error_text.decode()}"
+                )
+            
+            data = response.json()
+            
+            # Extract the generated text from Gemini response
+            if "candidates" in data and len(data["candidates"]) > 0:
+                candidate = data["candidates"][0]
+                if "content" in candidate and "parts" in candidate["content"]:
+                    parts = candidate["content"]["parts"]
+                    if len(parts) > 0 and "text" in parts[0]:
+                        return parts[0]["text"]
+            
+            # Fallback if structure is unexpected
+            return "No analysis generated by Gemini"
+            
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=408, detail="Gemini API request timed out")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Network error calling Gemini API: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error calling Gemini API: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

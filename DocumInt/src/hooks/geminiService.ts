@@ -28,7 +28,7 @@ const DEFAULT_CONFIG: Required<GeminiConfig> = {
   chunkSize: 3000,
   maxChunksToProcess: 1,
   delayBetweenCalls: 10000, // 10 seconds
-  model: "gemini-2.5-pro"
+  model: "gemini-2.5-flash"
 };
 
 /**
