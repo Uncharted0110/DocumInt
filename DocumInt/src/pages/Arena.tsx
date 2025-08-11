@@ -8,6 +8,7 @@ import Chat from '../components/Chat';
 import PDFListSidebar from '../components/PDFListSidebar';
 import PDFOutlineSidebar from '../components/PDFOutlineSidebar';
 import MindMap from '../components/Mindmap';
+import Insights from '../components/Insights';
 
 // Extend window type to include AdobeDC
 declare global {
@@ -393,31 +394,36 @@ const Arena = () => {
                         </div>
 
                         {/* Chat Panel */}
-                        <div className={`lg:static lg:w-96 lg:z-auto lg:translate-x-0`}>
-                            <Chat
-                                chatHistory={chatHistory}
-                                chatMessage={chatMessage}
-                                activeTab={activeTab}
-                                pdfFiles={files}
-                                onMessageChange={setChatMessage}
-                                onSendMessage={(message, persona, task, results) => {
-                                    if (message.trim()) {
-                                        const newMessage = {
-                                            id: crypto.randomUUID(),
-                                            type: 'user' as const,
-                                            message,
-                                            timestamp: new Date(),
-                                            persona,
-                                            task,
-                                            results
-                                        };
-                                        setChatHistory(prev => [...prev, newMessage]);
-                                        setChatMessage('');
-                                    }
-                                }}
-                                onTabChange={setActiveTab}
-                                onNavigateToPage={handlePageNavigation}
-                            />
+                        <div className={`lg:static lg:w-96 lg:z-auto lg:translate-x-0 flex flex-col`}>
+                            <div className="p-3 pb-2 border-b border-gray-200 bg-gray-50">
+                                <Insights />
+                            </div>
+                            <div className="min-h-0 flex-1">
+                                <Chat
+                                    chatHistory={chatHistory}
+                                    chatMessage={chatMessage}
+                                    activeTab={activeTab}
+                                    pdfFiles={files}
+                                    onMessageChange={setChatMessage}
+                                    onSendMessage={(message, persona, task, results) => {
+                                        if (message.trim()) {
+                                            const newMessage = {
+                                                id: crypto.randomUUID(),
+                                                type: 'user' as const,
+                                                message,
+                                                timestamp: new Date(),
+                                                persona,
+                                                task,
+                                                results
+                                            };
+                                            setChatHistory(prev => [...prev, newMessage]);
+                                            setChatMessage('');
+                                        }
+                                    }}
+                                    onTabChange={setActiveTab}
+                                    onNavigateToPage={handlePageNavigation}
+                                />
+                            </div>
                         </div>
                     </div>
 
