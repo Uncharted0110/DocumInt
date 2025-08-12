@@ -45,6 +45,9 @@ const Insights: React.FC = () => {
   const [items, setItems] = useState<FlippableCardItem[]>(seed);
   const [counter, setCounter] = useState(seed.length);
 
+  // Keep analysis payloads to podcastify later
+  const [analysisById, setAnalysisById] = useState<Record<string, GeminiAnalysisResponse | undefined>>({});
+  const [podcastState, setPodcastState] = useState<Record<string, { status: 'idle' | 'loading' | 'ready' | 'error'; script?: string; error?: string }>>({});
   // Inline add form state (replaces modal)
   const [isAdding, setIsAdding] = useState(false);
   const [persona, setPersona] = useState('');
@@ -74,7 +77,7 @@ const Insights: React.FC = () => {
   const analyzeWithGemini = async (personaVal: string, jobVal: string, taskVal: string) => {
     const geminiApiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
     // Read cache key set by Chat
-    const cacheKey = localStorage.getItem('cache_key') || '';
+    const cacheKey = sessionStorage.getItem('cache_key') || '';
 
     if (!personaVal.trim() || !jobVal.trim() || !taskVal.trim() || !cacheKey || !geminiApiKey) {
       console.error('Missing required fields: persona, job, task, cacheKey, or geminiApiKey');
@@ -115,6 +118,72 @@ const Insights: React.FC = () => {
     }
   };
 
+  // Call podcastify endpoint and update card content
+  const generatePodcast = async (id: string, analysis: GeminiAnalysisResponse) => {
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
+    if (!apiKey) {
+      setPodcastState(prev => ({ ...prev, [id]: { status: 'error', error: 'Missing API key' } }));
+      setItems(prev =>
+        prev.map(it =>
+          it.id === id
+            ? {
+                ...it,
+                backContent: <div className="text-xs text-red-600">Missing Gemini API key.</div>,
+                backExpandedContent: <div className="text-sm text-red-600">Missing Gemini API key.</div>,
+              }
+            : it
+        )
+      );
+      return;
+    }
+
+    setPodcastState(prev => ({ ...prev, [id]: { status: 'loading' } }));
+    try {
+      const res = await fetch('http://localhost:8000/podcastify-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analysis,
+          gemini_api_key: apiKey,
+          gemini_model: 'gemini-2.5-flash',
+          style: 'engaging, educational, conversational',
+          audience: 'general technical audience',
+          duration_hint: '3-5 minutes',
+          host_names: ['Host A', 'Host B'],
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const script: string = data.podcast_script || 'No script returned.';
+
+      setItems(prev =>
+        prev.map(it =>
+          it.id === id
+            ? {
+                ...it,
+                backContent: <pre className="text-xs text-gray-800 whitespace-pre-wrap">{script}</pre>,
+                backExpandedContent: <pre className="text-sm text-gray-800 whitespace-pre-wrap">{script}</pre>,
+              }
+            : it
+        )
+      );
+      setPodcastState(prev => ({ ...prev, [id]: { status: 'ready', script } }));
+    } catch (err: any) {
+      setPodcastState(prev => ({ ...prev, [id]: { status: 'error', error: String(err?.message || err) } }));
+      setItems(prev =>
+        prev.map(it =>
+          it.id === id
+            ? {
+                ...it,
+                backContent: <div className="text-xs text-red-600">Failed to generate podcast.</div>,
+                backExpandedContent: <div className="text-sm text-red-600">Failed to generate podcast.</div>,
+              }
+            : it
+        )
+      );
+    }
+  };
+
   const handleSubmitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!persona.trim() || !job.trim() || !task.trim()) return;
@@ -130,8 +199,9 @@ const Insights: React.FC = () => {
     const results = data?.retrieval_results || [];
     const analyses = (data?.gemini_analysis || []).filter(a => !a.error);
 
+    const id = crypto.randomUUID();
     const newItem: FlippableCardItem = {
-      id: crypto.randomUUID(),
+      id,
       frontTitle: persona,
       frontSubtitle: job,
       frontIcon: accentPalette[idx].icon,
@@ -181,16 +251,61 @@ const Insights: React.FC = () => {
           )}
         </div>
       ),
-      backContent: <div className="text-xs text-gray-700">Flip is available. Attach audio later if needed.</div>,
-      backExpandedContent: <div className="text-xs text-gray-700">Same as front. Use flip for audio if added.</div>,
+      // Back: start with loading placeholder; will be replaced when podcast is ready
+      backContent: <div className="text-xs text-gray-600">Generating podcast…</div>,
+      backExpandedContent: <div className="text-sm text-gray-600">Generating podcast…</div>,
     };
 
-    setItems(prev => [...prev, newItem]); // append at bottom
+    setItems(prev => [...prev, newItem]);
     setCounter(n);
+    setAnalysisById(prev => ({ ...prev, [id]: data || undefined }));
+
+    if (data) {
+      // Kick off podcast generation immediately (no flip needed)
+      generatePodcast(id, data);
+    } else {
+      // Analysis failed; show error on back
+      setPodcastState(prev => ({ ...prev, [id]: { status: 'error', error: 'No analysis returned' } }));
+      setItems(prev =>
+        prev.map(it =>
+          it.id === id
+            ? {
+                ...it,
+                backContent: <div className="text-xs text-red-600">Analysis failed. Cannot generate podcast.</div>,
+                backExpandedContent: <div className="text-sm text-red-600">Analysis failed. Cannot generate podcast.</div>,
+              }
+            : it
+        )
+      );
+    }
+
     setIsAdding(false);
     setPersona('');
     setJob('');
     setTask('');
+  };
+
+  // Flip handler: call podcastify on first flip
+  const handleFlip = (id: string, flipped: boolean) => {
+    if (!flipped) return;
+    const state = podcastState[id]?.status || 'idle';
+    if (state === 'idle') {
+      // show loading message immediately
+      setItems(prev =>
+        prev.map(it =>
+          it.id === id
+            ? {
+                ...it,
+                backContent: <div className="text-xs text-gray-600">Generating podcast…</div>,
+                backExpandedContent: <div className="text-sm text-gray-600">Generating podcast…</div>,
+              }
+            : it
+        )
+      );
+      if (analysisById[id]) {
+        generatePodcast(id, analysisById[id]!);
+      }
+    }
   };
 
   return (

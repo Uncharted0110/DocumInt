@@ -76,7 +76,7 @@ const Chat: React.FC<ChatProps> = ({
       if (response.ok) {
         const data = await response.json();
         setCacheKey(data.cache_key);
-        localStorage.setItem('cache_key', data.cache_key)
+        sessionStorage.setItem('cache_key', data.cache_key)
         console.log('PDFs cached successfully:', data);
       } else {
         console.error('Failed to cache PDFs');

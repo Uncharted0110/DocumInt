@@ -17,6 +17,8 @@ from src.extract.content_chunker import extract_chunks_with_headings
 from src.retrieval.hybrid_retriever import build_hybrid_index, search_top_k_hybrid
 from src.output.formatter import format_bm25_output
 from src.utils.file_utils import load_json, save_json, ensure_dir
+from pydantic import BaseModel
+from typing import Optional
 
 app = FastAPI()
 
@@ -501,6 +503,97 @@ async def call_gemini_api(prompt: str, api_key: str, model: str = "gemini-2.0-fl
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error calling Gemini API: {str(e)}")
 
+
+class PodcastifyRequest(BaseModel):
+    analysis: Dict[str, Any]                      # Full JSON from /analyze-chunks-with-gemini
+    gemini_api_key: str
+    gemini_model: Optional[str] = "gemini-2.5-flash"
+    style: Optional[str] = "engaging, educational, conversational"
+    audience: Optional[str] = "general technical audience"
+    duration_hint: Optional[str] = "3-5 minutes"
+    host_names: Optional[List[str]] = ["Host A", "Host B"]
+
+@app.post("/podcastify-analysis")
+async def podcastify_analysis(req: PodcastifyRequest):
+    try:
+        meta = (req.analysis or {}).get("metadata", {}) or {}
+        persona = meta.get("persona", "Unknown Persona")
+        job = meta.get("job_to_be_done", "Unknown Job")
+        domain = meta.get("domain", "general")
+
+        # Trim inputs to keep the prompt reasonable
+        retrieval = (req.analysis or {}).get("retrieval_results", []) or []
+        retrieval = retrieval[:5]
+
+        analyses = (req.analysis or {}).get("gemini_analysis", []) or []
+        analyses = [a for a in analyses if not a.get("error")][:3]
+
+        insights = ((req.analysis or {}).get("summary", {}) or {}).get("top_insights", []) or []
+        insights = insights[:6]
+
+        hosts = (req.host_names or ["Host A", "Host B"])
+        if len(hosts) < 2:
+            hosts = ["Host A", "Host B"]
+
+        # Build a podcast-style prompt
+        prompt = f"""
+You are a scriptwriter creating a short podcast conversation.
+
+Constraints:
+- Style: {req.style}
+- Audience: {req.audience}
+- Duration: {req.duration_hint}
+- Speakers: {hosts[0]} and {hosts[1]}
+- Avoid hallucinations. Use only provided material. Cite document and section casually when relevant.
+
+Context:
+- Persona: {persona}
+- Job to be done: {job}
+- Domain: {domain}
+
+Top Insights:
+{chr(10).join(f"- {i}" for i in insights) if insights else "- (none)"}
+
+Key Retrieval Results (document • section • page):
+{chr(10).join(f"- {r.get('document','Unknown')} • {r.get('section_title','No section')} • p.{r.get('page_number',1)}" for r in retrieval) if retrieval else "- (none)"}
+
+Analysis Excerpts:
+{chr(10).join(f"- {a.get('document','Unknown')} • {a.get('section_title','No section')} (p.{a.get('page_number',1)}): { (a.get('gemini_analysis') or '')[:800] }" for a in analyses) if analyses else "- (none)"}
+
+Task:
+Write a podcast script with:
+1) A concise intro hook (1–2 lines).
+2) A back-and-forth discussion that explains the most important insights clearly, using natural conversational turns.
+3) Occasional references to documents/sections (e.g., “in the API Guide, section 3, page 12”).
+4) A brief wrap-up with next steps.
+
+Output format (plain text):
+Title: <compelling title>
+{hosts[0]}: <line>
+{hosts[1]}: <line>
+... (alternate clearly)
+"""
+
+        script = await call_gemini_api(
+            prompt=prompt,
+            api_key=req.gemini_api_key,
+            model=req.gemini_model or "gemini-2.5-flash"
+        )
+
+        return {
+            "metadata": {
+                "persona": persona,
+                "job_to_be_done": job,
+                "domain": domain,
+                "used_model": req.gemini_model or "gemini-2.5-flash",
+                "host_names": hosts
+            },
+            "podcast_script": script
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating podcast script: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
