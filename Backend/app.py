@@ -1,6 +1,8 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from io import BytesIO
+import html
 import tempfile
 import os
 import sys
@@ -594,6 +596,87 @@ Title: <compelling title>
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating podcast script: {str(e)}")
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: Optional[str] = "en-US-AvaMultilingualNeural"
+    audio_format: Optional[str] = "mp3"   # "mp3" | "wav"
+    speaking_rate: Optional[float] = 1.0  # 0.5 .. 2.0
+    pitch: Optional[str] = "0%"           # e.g., "-2%", "+2%"
+    lang: Optional[str] = "en-US"
+
+def _build_ssml(text: str, voice: str, rate: float, pitch: str, lang: str) -> str:
+    safe = html.escape(text or "")
+    # Convert rate multiplier to percentage (1.0 = 100% normal speed)
+    rate_pct = rate * 100
+    return f"""<speak version="1.0" xml:lang="{lang}">
+  <voice name="{voice}">
+    <prosody rate="{rate_pct:.0f}%" pitch="{pitch}">{safe}</prosody>
+  </voice>
+</speak>"""
+
+@app.post("/tts")
+async def tts(req: TTSRequest):
+    try:
+        try:
+            import azure.cognitiveservices.speech as speechsdk
+        except ImportError:
+            raise HTTPException(status_code=500, detail="azure-cognitiveservices-speech is not installed. pip install azure-cognitiveservices-speech")
+
+        # Support both standard and VITE_* env var names
+        speech_key = "3QxG0dKf63DYCJ3viQXNB3FpeKeNBXHYZBr9LgdKP5uypLUbHqxyJQQJ99BHACYeBjFXJ3w3AAAAACOGnhao"
+        speech_region = "eastus"
+        if not speech_key or not speech_region:
+            raise HTTPException(status_code=500, detail="Missing SPEECH_KEY/SPEECH_REGION environment variables")
+
+        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+        # Output format
+        fmt = (req.audio_format or "mp3").lower()
+        if fmt == "wav":
+            speech_config.set_speech_synthesis_output_format(
+                speechsdk.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm
+            )
+            media_type = "audio/wav"
+            filename = "speech.wav"
+        else:
+            speech_config.set_speech_synthesis_output_format(
+                speechsdk.SpeechSynthesisOutputFormat.Audio48Khz192KBitRateMonoMp3
+            )
+            media_type = "audio/mpeg"
+            filename = "speech.mp3"
+
+        # Build SSML and synthesize to memory (no speakers)
+        ssml = _build_ssml(
+            text=req.text,
+            voice=(req.voice or "en-US-AvaMultilingualNeural"),
+            rate=(0.01),
+            pitch=(req.pitch or "0%"),
+            lang=(req.lang or "en-US"),
+        )
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: synthesizer.speak_ssml_async(ssml).get())
+
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+            audio_bytes = bytes(result.audio_data or b"")
+            if not audio_bytes:
+                raise HTTPException(status_code=500, detail="Azure TTS returned empty audio")
+            return StreamingResponse(
+                BytesIO(audio_bytes),
+                media_type=media_type,
+                headers={"Content-Disposition": f'inline; filename="{filename}"'}
+            )
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            details = result.cancellation_details
+            msg = f"TTS canceled: {details.reason}. {details.error_details or ''}".strip()
+            raise HTTPException(status_code=500, detail=msg)
+        else:
+            raise HTTPException(status_code=500, detail="Unknown TTS error")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

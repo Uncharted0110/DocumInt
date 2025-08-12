@@ -48,7 +48,7 @@ const Insights: React.FC = () => {
 
   // Keep analysis payloads to podcastify later
   const [analysisById, setAnalysisById] = useState<Record<string, GeminiAnalysisResponse | undefined>>({});
-  const [podcastState, setPodcastState] = useState<Record<string, { status: 'idle' | 'loading' | 'ready' | 'error'; script?: string; error?: string }>>({});
+  const [podcastState, setPodcastState] = useState<Record<string, { status: 'idle' | 'loading' | 'ready' | 'error'; script?: string; error?: string; audioUrl?: string }>>({});
   // Inline add form state (replaces modal)
   const [isAdding, setIsAdding] = useState(false);
   const [persona, setPersona] = useState('');
@@ -120,7 +120,7 @@ const Insights: React.FC = () => {
     }
   };
 
-  // Call podcastify endpoint and update card content
+  // Call podcastify endpoint and then TTS; update card content with audio player
   const generatePodcast = async (id: string, analysis: GeminiAnalysisResponse) => {
     const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey) {
@@ -140,8 +140,22 @@ const Insights: React.FC = () => {
     }
 
     setPodcastState(prev => ({ ...prev, [id]: { status: 'loading' } }));
+    // show loading
+    setItems(prev =>
+      prev.map(it =>
+        it.id === id
+          ? {
+              ...it,
+              backContent: <div className="text-xs text-gray-600">Generating podcast script…</div>,
+              backExpandedContent: <div className="text-sm text-gray-600">Generating podcast script…</div>,
+            }
+          : it
+      )
+    );
+
     try {
-      const res = await fetch('http://localhost:8000/podcastify-analysis', {
+      // 1) Get podcast script
+      const resScript = await fetch('http://localhost:8000/podcastify-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -154,22 +168,63 @@ const Insights: React.FC = () => {
           host_names: ['Host A', 'Host B'],
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      const script: string = data.podcast_script || 'No script returned.';
+      if (!resScript.ok) throw new Error(await resScript.text());
+      const data = await resScript.json();
+      const script: string = data.podcast_script || '';
+
+      if (!script.trim()) throw new Error('Empty podcast script');
+
+      // 2) Send script to TTS
+      setItems(prev =>
+        prev.map(it =>
+          it.id === id
+            ? {
+                ...it,
+                backContent: <div className="text-xs text-gray-600">Synthesizing audio…</div>,
+                backExpandedContent: <div className="text-sm text-gray-600">Synthesizing audio…</div>,
+              }
+            : it
+        )
+      );
+
+      const resTts = await fetch('http://localhost:8000/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: script,
+          voice: 'en-US-AvaMultilingualNeural',
+          audio_format: 'mp3',
+          speaking_rate: 1.0,
+          pitch: '0%',
+          lang: 'en-US',
+        }),
+      });
+      if (!resTts.ok) throw new Error(await resTts.text());
+
+      // Blob URL for audio element
+      const blob = await resTts.blob();
+      const url = URL.createObjectURL(blob);
+
+      const audioEl = (u: string) => (
+        <div className="w-full">
+          <audio controls className="w-full" src={u} />
+          <div className="mt-1 text-[11px] text-gray-500">Podcast audio generated</div>
+        </div>
+      );
 
       setItems(prev =>
         prev.map(it =>
           it.id === id
             ? {
                 ...it,
-                backContent: <pre className="text-xs text-gray-800 whitespace-pre-wrap">{script}</pre>,
-                backExpandedContent: <pre className="text-sm text-gray-800 whitespace-pre-wrap">{script}</pre>,
+                backContent: audioEl(url),
+                backExpandedContent: audioEl(url),
               }
             : it
         )
       );
-      setPodcastState(prev => ({ ...prev, [id]: { status: 'ready', script } }));
+
+      setPodcastState(prev => ({ ...prev, [id]: { status: 'ready', script, audioUrl: url } }));
     } catch (err: any) {
       setPodcastState(prev => ({ ...prev, [id]: { status: 'error', error: String(err?.message || err) } }));
       setItems(prev =>
@@ -177,8 +232,8 @@ const Insights: React.FC = () => {
           it.id === id
             ? {
                 ...it,
-                backContent: <div className="text-xs text-red-600">Failed to generate podcast.</div>,
-                backExpandedContent: <div className="text-sm text-red-600">Failed to generate podcast.</div>,
+                backContent: <div className="text-xs text-red-600">Failed to generate podcast audio.</div>,
+                backExpandedContent: <div className="text-sm text-red-600">Failed to generate podcast audio.</div>,
               }
             : it
         )
@@ -292,7 +347,6 @@ const Insights: React.FC = () => {
     if (!flipped) return;
     const state = podcastState[id]?.status || 'idle';
     if (state === 'idle') {
-      // show loading message immediately
       setItems(prev =>
         prev.map(it =>
           it.id === id
@@ -344,6 +398,7 @@ const Insights: React.FC = () => {
             className=""
             collapsedHeightClass="h-28"
             expandedHeightClass="h-155"
+            onFlip={handleFlip as any}
           />
 
           {!isAdding ? (
