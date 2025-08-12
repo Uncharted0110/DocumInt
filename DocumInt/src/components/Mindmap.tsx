@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import * as d3 from "d3";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { useLocation } from 'react-router-dom';
 
 // Spacing & animation knobs
 const V_SPACING = 90; // vertical spacing between rows
@@ -28,6 +29,10 @@ interface MindMapProps {
 }
 
 export default function MindMap({ onClose }: Readonly<MindMapProps>) {
+  const location = useLocation();
+  // Get insightsData from route state
+  const insightsData = location.state?.insightsData;
+
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -212,14 +217,14 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
       .remove();
 
     // NODES (animated join)
-    const nodeGroup = g.append("g").attr("class", "nodes");
-    const nodeSel = nodeGroup
-      .selectAll<SVGGElement, any>("g.node")
+    const nodeSel = g.selectAll<SVGGElement, any>("g.node")
       .data(root.descendants(), (d: any) => d.data.id);
 
-    const nodeEnter = nodeSel
-      .enter()
-      .append("g")
+    // Remove old nodes
+    nodeSel.exit().remove();
+
+    // Enter new nodes with adaptive sizing and formatted text
+    const nodeEnter = nodeSel.enter().append("g")
       .attr("class", "node")
       .attr("transform", (d: any) => {
         const prev = prevPosRef.current[d.data.id];
@@ -227,81 +232,61 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
         const parentPos = d.parent ? newPos[d.parent.data.id] : newPos[d.data.id];
         return `translate(${parentPos.x},${parentPos.y})`;
       })
-      .style("cursor", "move");
+      .style("cursor", "move")
+      .each(function (d: any) {
+        const group = d3.select(this);
+        const text = d.data.label || "";
+        // Estimate width: 10px per character, min 160, max 400
+        const lines = text.split(/\r?\n|(?<=\.) /g);
+        const maxLineLength = Math.max(...lines.map((l: string) => l.length));
+        const rectWidth = Math.min(Math.max(16 * maxLineLength, 160), 400);
+        const rectHeight = Math.max(48, 24 * lines.length);
+        group.append("rect")
+          .attr("x", -rectWidth / 2)
+          .attr("y", -rectHeight / 2)
+          .attr("width", rectWidth)
+          .attr("height", rectHeight)
+          .attr("rx", 10)
+          .attr("ry", 10)
+          .attr("fill", d.data.color || "#ddd")
+          .attr("stroke", "#333")
+          .attr("stroke-width", 2)
+          .style("filter", "drop-shadow(1px 1px 2px rgba(0,0,0,0.25))");
+        group.append("foreignObject")
+          .attr("x", -rectWidth / 2 + 8)
+          .attr("y", -rectHeight / 2 + 8)
+          .attr("width", rectWidth - 16)
+          .attr("height", rectHeight - 16)
+          .append("xhtml:div")
+          .style("font", "14px sans-serif")
+          .style("font-weight", "bold")
+          .style("color", "#222")
+          .style("white-space", "pre-line")
+          .style("word-break", "break-word")
+          .style("line-height", "1.4")
+          .style("text-align", "center")
+          .text(text);
+      });
 
-    const rectWidth = 160;
-    const rectHeight = 48;
-
-    nodeEnter
-      .append("rect")
-      .attr("x", -rectWidth / 2)
-      .attr("y", -rectHeight / 2)
-      .attr("width", rectWidth)
-      .attr("height", rectHeight)
-      .attr("rx", 10)
-      .attr("ry", 10)
-      .attr("fill", (d: any) => d.data.color || "#ddd")
-      .attr("stroke", "#333")
-      .attr("stroke-width", 2)
-      .style("filter", "drop-shadow(1px 1px 2px rgba(0,0,0,0.25))");
-
-    nodeEnter
-      .append("text")
-      .attr("text-anchor", "middle")
-      .attr("dy", "0.35em")
-      .style("font", "12px sans-serif")
-      .style("font-weight", "bold")
-      .style("fill", "#000")
-      .text((d: any) => d.data.label);
-
-    // Update labels for existing nodes
-    nodeSel.select("text").text((d: any) => d.data.label);
-
-    // Transition enter + update to new positions
-    nodeEnter
-      .merge(nodeSel as any)
-      .transition()
+    // Update positions for all nodes
+    const allNodes = nodeSel.merge(nodeEnter as any);
+    allNodes.transition()
       .duration(COLLAPSE_DURATION)
       .attr("transform", (d: any) => `translate(${newPos[d.data.id].x},${newPos[d.data.id].y})`);
 
-    // Exit transition
-    nodeSel
-      .exit()
-      .transition()
-      .duration(COLLAPSE_DURATION)
-      .style("opacity", 0)
-      .attr("transform", (d: any) => {
-        const parentPos = d.parent ? newPos[d.parent.data.id] || prevPosRef.current[d.parent.data.id] : newPos[d.data.id];
-        return `translate(${parentPos.x},${parentPos.y})`;
+    // Node interactions (dblclick, etc)
+    allNodes
+      .on("dblclick", (event: any, d: any) => {
+        const updated = prompt("Edit node label:", d.data.label);
+        if (!updated) return;
+        updateNodeLabel(d.data.id, updated);
       })
-      .remove();
-
-    // Interactions
-    const allNodes = nodeGroup.selectAll<SVGGElement, any>("g.node");
-
-    allNodes.on("click", (event: MouseEvent, d: any) => {
-      if ((event as any).detail && (event as any).detail > 1) return; // ignore dblclick
-      if (isDraggingRef.current) return;
-      setCollapsedIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(d.data.id)) next.delete(d.data.id);
-        else next.add(d.data.id);
-        return next;
+      .on("contextmenu", (event: PointerEvent, d: any) => {
+        event.preventDefault();
+        if (d.data.id === "1") return;
+        if (!confirm(`Delete "${d.data.label}"?`)) return;
+        deleteNodeById(d.data.id);
       });
-    });
-
-    allNodes.on("dblclick", (_event, d: any) => {
-      const updated = prompt("Edit node label:", d.data.label);
-      if (!updated) return;
-      updateNodeLabel(d.data.id, updated);
-    });
-
-    allNodes.on("contextmenu", (event: PointerEvent, d: any) => {
-      event.preventDefault();
-      if (d.data.id === "1") return;
-      if (!confirm(`Delete "${d.data.label}"?`)) return;
-      deleteNodeById(d.data.id);
-    });
 
     // Drag behavior (zoom-aware, thresholded) for non-root nodes
     const dragBehavior = d3
@@ -418,7 +403,24 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
     };
 
     updateMiniViewport();
-  }, [nodes, links, updateNodeLabel, deleteNodeById, positionOverrides, collapsedIds]);
+  }, [nodes, links, updateNodeLabel, deleteNodeById, positionOverrides, collapsedIds, insightsData]);
+
+  // If insightsData is present, use it to set nodes/links
+  useEffect(() => {
+    if (insightsData && insightsData.persona && Array.isArray(insightsData.chunks) && insightsData.chunks.length > 0) {
+      const newNodes: Node[] = [
+        { id: "1", label: insightsData.persona, x: 0, y: 0, color: "#ffcc00" }
+      ];
+      const newLinks: Link[] = [];
+      insightsData.chunks.forEach((chunk: string, index: number) => {
+        const id = (index + 2).toString();
+        newNodes.push({ id, label: chunk, x: 0, y: 0, color: "#4cafef" });
+        newLinks.push({ id: `e1-${id}`, source: "1", target: id });
+      });
+      setNodes(newNodes);
+      setLinks(newLinks);
+    }
+  }, [insightsData]);
 
   // Zoom controls
   const zoomIn = useCallback(() => {

@@ -28,11 +28,11 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const lastNavigationPageRef = useRef<number | undefined>(undefined);
 
   // Extract text and analyze with Gemini whenever pdfUrl changes
-  useEffect(() => {
-    if (pdfUrl) {
-      extractAndAnalyzePDF(pdfUrl);
-    }
-  }, [pdfUrl]);
+  // useEffect(() => {
+  //   if (pdfUrl) {
+  //     extractAndAnalyzePDF(pdfUrl);
+  //   }
+  // }, [pdfUrl]);
 
   // Use the custom navigation hook
   const { navigateToPage } = useAdobePDFNavigation({

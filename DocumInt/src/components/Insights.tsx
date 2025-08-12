@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import FlippableCards, { type FlippableCardItem } from './FlippableCards';
 import { Search, FileText, ListChecks, Plus, Loader2, Lightbulb } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const accentPalette = [
   { cls: 'bg-indigo-50 border-indigo-200', icon: <Lightbulb size={20} /> },
@@ -55,6 +56,7 @@ const Insights: React.FC = () => {
   const [task, setTask] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // Auto-scroll to bottom when items change
   useEffect(() => {
@@ -308,14 +310,35 @@ const Insights: React.FC = () => {
     }
   };
 
+  // Handler to view mind map for a given analysis
+  const handleViewMindMap = (analysis: GeminiAnalysisResponse | undefined) => {
+    if (!analysis) return;
+    const persona = analysis.metadata?.persona || 'Persona';
+    // Use retrieval_results for actual chunk content
+    const chunks = (analysis.retrieval_results || []).map(
+      (chunk) => chunk.content || chunk.section_title || 'No content'
+    );
+    navigate('/mindmap', { state: { insightsData: { persona, chunks } } });
+  };
+
   return (
     <div className="w-full">
       <div className="mb-2 flex items-center justify-between">
         <div className="font-semibold text-gray-700">Insights</div>
       </div>
-
       <div ref={scrollRef} className="max-h-155 overflow-y-auto pr-1">
         <div className="flex flex-col gap-3">
+          {items.map((item, idx) => (
+            <div key={item.id} className="insight-card">
+              {/* ...existing card content... */}
+              <button
+                onClick={() => handleViewMindMap(analysisById[item.id])}
+                style={{ marginTop: '10px', padding: '8px 16px', background: '#6b7280', color: '#fff', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+              >
+                View Mind Map
+              </button>
+            </div>
+          ))}
           <FlippableCards
             items={items}
             className=""
