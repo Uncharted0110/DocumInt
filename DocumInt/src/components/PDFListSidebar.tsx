@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, ChevronRight, ChevronLeft, LucideTrash } from 'lucide-react';
+import { FileText, ChevronRight, ChevronLeft, LucideTrash, ArrowLeft } from 'lucide-react';
 
 interface PDFListSidebarProps {
   projectName: string;
@@ -9,6 +9,7 @@ interface PDFListSidebarProps {
   isMinimized: boolean;
   onToggleMinimize: () => void;
   onRemovePdf?: (file: File) => void;
+  onBack?: () => void;
 }
 
 const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
@@ -19,6 +20,7 @@ const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
   isMinimized,
   onToggleMinimize,
   onRemovePdf,
+  onBack,
 }) => {
   return (
     <div
@@ -28,11 +30,22 @@ const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
       {/* Header - Fixed */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
         {!isMinimized && (
-          <div className="min-w-0 flex-1 mr-2">
-            <h2 className="text-lg font-semibold truncate" title={projectName}>
-              {projectName}
-            </h2>
-            <p className="text-sm text-gray-400">{files.length} Documents</p>
+          <div className="min-w-0 flex-1 mr-2 flex items-center gap-2">
+            {onBack && (
+              <button
+                onClick={onBack}
+                title="Back to Projects"
+                className="p-2 rounded-md bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold truncate" title={projectName}>
+                {projectName}
+              </h2>
+              <p className="text-sm text-gray-400">{files.length} Documents</p>
+            </div>
           </div>
         )}
         <button
@@ -57,8 +70,8 @@ const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
           </div>
         ) : (
           <div className="py-1">
-            {files.map((file, index) => (
-              <div key={index} className="relative group">
+            {files.map((file) => (
+              <div key={file.name} className="relative group">
                 <button
                   onClick={() => onPdfSelect(file)}
                   className={`w-full flex items-center px-4 py-3 hover:bg-gray-700 transition-colors ${

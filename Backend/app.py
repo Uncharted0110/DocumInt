@@ -21,6 +21,13 @@ from src.output.formatter import format_bm25_output
 from src.utils.file_utils import load_json, save_json, ensure_dir
 from pydantic import BaseModel
 from typing import Optional
+from hashlib import sha256
+from datetime import datetime, timezone
+import re
+import shutil
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -33,9 +40,72 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Constant for missing heading label
+NO_HEADING = 'No heading'
+
 # Global cache for PDF embeddings and indices
 pdf_cache: Dict[str, Any] = {}
 executor = ThreadPoolExecutor(max_workers=4)
+
+# Persistence directories
+BASE_DATA_DIR = Path(os.environ.get("DOCUMINT_DATA_DIR", "./data/projects")).resolve()
+BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+META_FILENAME = "meta.json"
+CHUNKS_FILENAME = "chunks.json"
+
+# Constants
+GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash'
+HOST_A = 'Host A'
+HOST_B = 'Host B'
+
+# ---------------- Persistence Helpers -----------------
+
+def _safe_project_name(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:100] if name else "project"
+
+def _project_path(project_name: str) -> Path:
+    return BASE_DATA_DIR / _safe_project_name(project_name)
+
+def _meta_path(project_name: str) -> Path:
+    return _project_path(project_name) / META_FILENAME
+
+def _chunks_path(project_name: str) -> Path:
+    return _project_path(project_name) / CHUNKS_FILENAME
+
+def load_project_meta(project_name: str) -> Dict[str, Any] | None:
+    p = _meta_path(project_name)
+    if p.exists():
+        try:
+            return json.load(open(p, "r", encoding="utf-8"))
+        except Exception:
+            return None
+    return None
+
+def load_project_chunks(project_name: str) -> List[Dict[str, Any]]:
+    p = _chunks_path(project_name)
+    if p.exists():
+        try:
+            return json.load(open(p, "r", encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+def save_project_state(project_name: str, meta: Dict[str, Any], chunks: List[Dict[str, Any]]):
+    proj_dir = _project_path(project_name)
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    meta = {**meta, "updated_at": datetime.now(timezone.utc).isoformat()}
+    with open(_meta_path(project_name), "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+    with open(_chunks_path(project_name), "w", encoding="utf-8") as f:
+        json.dump(chunks, f, indent=2)
+
+# -------------- Hash Utilities -----------------
+
+def hash_bytes(data: bytes) -> str:
+    return sha256(data).hexdigest()
+
+# -------------- Existing endpoints --------------
 
 def detect_domain(persona: str, task: str) -> str:
     """Detect domain from persona and task for optimized parameters"""
@@ -100,85 +170,172 @@ async def extract_pdf_outline(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
 @app.post("/cache-pdfs")
-async def cache_pdfs(files: List[UploadFile] = File(...)):
+async def cache_pdfs(project_name: str = Form(""), files: List[UploadFile] = File(...)):
     """
-    Cache PDF files and prepare embeddings for persona-based retrieval
+    Cache PDF files and prepare embeddings for persona-based retrieval.
+    Supports project-level persistence: if project_name is supplied, previously processed
+    PDFs are reused and only new PDFs are processed. Cached chunks persisted on disk.
     """
     try:
-        # Create temporary directory for PDFs
-        temp_dir = tempfile.mkdtemp()
-        pdf_files = []
-        
-        # Save uploaded PDFs to temporary directory
+        if not files:
+            raise HTTPException(status_code=400, detail="No PDF files provided")
+
+        safe_name = _safe_project_name(project_name) if project_name else "session_" + uuid.uuid4().hex[:8]
+        existing_meta = load_project_meta(safe_name) or {"project_name": safe_name, "files": []}
+        existing_files_meta: List[Dict[str, Any]] = existing_meta.get("files", [])
+        existing_hashes = {f.get("hash") for f in existing_files_meta}
+        existing_chunks: List[Dict[str, Any]] = load_project_chunks(safe_name)
+
+        new_pdf_paths: List[str] = []
+        new_files_meta: List[Dict[str, Any]] = []
+        temp_dir: Optional[str] = None
+
+        # Collect truly new PDFs
         for file in files:
             if not file.filename.lower().endswith('.pdf'):
                 continue
-                
-            file_path = os.path.join(temp_dir, file.filename)
             content = await file.read()
-            
+            file_hash = hash_bytes(content)
+            if file_hash in existing_hashes:
+                continue  # already processed
+            if temp_dir is None:
+                temp_dir = tempfile.mkdtemp()
+            file_path = os.path.join(temp_dir, file.filename)
             async with aiofiles.open(file_path, 'wb') as f:
                 await f.write(content)
-            
-            pdf_files.append(file_path)
-        
-        if not pdf_files:
-            raise HTTPException(status_code=400, detail="No valid PDF files provided")
-        
-        # Process PDFs in background
-        loop = asyncio.get_event_loop()
+            new_pdf_paths.append(file_path)
+            new_files_meta.append({
+                "name": file.filename,
+                "hash": file_hash,
+                "size": len(content)
+            })
+
         cache_key = str(uuid.uuid4())
-        
-        # Start processing in background
-        asyncio.create_task(process_pdfs_background(cache_key, pdf_files, temp_dir))
-        
+        pdf_cache[cache_key] = {"processing": True, "project_name": safe_name, "chunks": existing_chunks, "pdf_files": [f["name"] for f in existing_files_meta]}
+
+        # Case 1: Reuse existing (have chunks, no new files)
+        if not new_pdf_paths and existing_chunks:
+            try:
+                detected_domain = detect_domain("general", "general")
+                retriever = build_hybrid_index(existing_chunks, domain=detected_domain)
+                pdf_cache[cache_key] = {
+                    "retriever": retriever,
+                    "chunks": existing_chunks,
+                    "domain": detected_domain,
+                    "pdf_files": [f["name"] for f in existing_files_meta],
+                    "project_name": safe_name,
+                    "reused": True
+                }
+                return {
+                    "cache_key": cache_key,
+                    "message": "Reused existing project cache",
+                    "pdf_count": len(existing_files_meta),
+                    "project_name": safe_name,
+                    "reused": True
+                }
+            except Exception as e:
+                # If index build fails (e.g. empty/invalid chunks) surface gracefully
+                pdf_cache[cache_key] = {
+                    "error": f"Index build failed: {e}",
+                    "chunks": existing_chunks,
+                    "project_name": safe_name
+                }
+                raise HTTPException(status_code=500, detail=f"Error rebuilding existing cache: {e}")
+
+        # Case 2: Nothing to do (no existing chunks & no new files)
+        if not new_pdf_paths and not existing_chunks:
+            pdf_cache[cache_key] = {
+                "empty": True,
+                "project_name": safe_name,
+                "chunks": [],
+                "pdf_files": []
+            }
+            return {
+                "cache_key": cache_key,
+                "message": "No PDFs to process (no new files and no cached data)",
+                "pdf_count": 0,
+                "project_name": safe_name,
+                "reused": False,
+                "empty": True
+            }
+
+        # Case 3: Process new files (possibly with existing chunks)
+        def run_bg():
+            try:
+                process_pdfs_background(cache_key, new_pdf_paths, temp_dir, safe_name, existing_chunks, existing_meta, new_files_meta)
+            except Exception as e:
+                pdf_cache[cache_key] = {"error": f"Processing failed: {e}", "project_name": safe_name}
+
+        task = asyncio.create_task(asyncio.to_thread(run_bg))
+        pdf_cache[cache_key]["task"] = task
+
         return {
             "cache_key": cache_key,
-            "message": "PDFs are being processed in background",
-            "pdf_count": len(pdf_files)
+            "message": f"Processing {len(new_pdf_paths)} new PDF(s); {len(existing_chunks)} previously cached",
+            "pdf_count": len(new_pdf_paths),
+            "project_name": safe_name,
+            "reused": False
         }
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error caching PDFs: {str(e)}")
 
-async def process_pdfs_background(cache_key: str, pdf_files: List[str], temp_dir: str):
-    """
-    Process PDFs in background to create embeddings and cache
-    """
+def process_pdfs_background(cache_key: str, pdf_files: List[str], temp_dir: Optional[str], project_name: str, existing_chunks: List[Dict[str, Any]], existing_meta: Dict[str, Any], new_files_meta: List[Dict[str, Any]]):
+    """Synchronous processing run in background task."""
     try:
-        # Extract chunks from PDFs
         extractor = PDFHeadingExtractor()
-        all_chunks = []
-        
+        all_chunks = list(existing_chunks)
+
         for pdf_file in pdf_files:
-            print(f"🔍 Processing {os.path.basename(pdf_file)}")
-            headings = extractor.extract_headings(pdf_file)
-            chunks = extract_chunks_with_headings(pdf_file, headings)
-            all_chunks.extend(chunks)
-        
-        # Build hybrid index
+            try:
+                print(f"🔍 Processing {os.path.basename(pdf_file)} (project: {project_name})")
+                headings = extractor.extract_headings(pdf_file)
+                chunks = extract_chunks_with_headings(pdf_file, headings)
+                all_chunks.extend(chunks)
+            except Exception as e:
+                print(f"❌ Error processing {pdf_file}: {e}")
+
+        if not all_chunks:
+            # Nothing extracted – store placeholder
+            save_project_state(project_name, {**existing_meta, "files": existing_meta.get("files", []) + new_files_meta, "domain": "general"}, [])
+            pdf_cache[cache_key] = {
+                "chunks": [],
+                "domain": "general",
+                "pdf_files": [f["name"] for f in (existing_meta.get("files", []) + new_files_meta)],
+                "project_name": project_name,
+                "empty": True
+            }
+            print(f"⚠️ No chunks extracted for project '{project_name}'.")
+            return
+
         detected_domain = detect_domain("general", "general")
-        retriever = build_hybrid_index(all_chunks, domain=detected_domain)
-        
-        # Cache the results
+        try:
+            retriever = build_hybrid_index(all_chunks, domain=detected_domain)
+        except Exception as e:
+            print(f"❌ Index build failed for project {project_name}: {e}")
+            retriever = None
+
+        merged_files_meta = existing_meta.get("files", []) + new_files_meta
+        save_project_state(project_name, {**existing_meta, "files": merged_files_meta, "domain": detected_domain}, all_chunks)
+
         pdf_cache[cache_key] = {
             "retriever": retriever,
             "chunks": all_chunks,
             "domain": detected_domain,
-            "pdf_files": [os.path.basename(f) for f in pdf_files]
+            "pdf_files": [f["name"] for f in merged_files_meta],
+            "project_name": project_name,
+            "index_error": retriever is None
         }
-        
-        print(f"✅ Cached {len(all_chunks)} chunks for cache key: {cache_key}")
-        
+        print(f"✅ Cached {len(all_chunks)} total chunks for project '{project_name}' (cache key {cache_key})")
     except Exception as e:
-        print(f"❌ Error processing PDFs: {str(e)}")
+        print(f"❌ Error processing PDFs for project {project_name}: {e}")
     finally:
-        # Clean up temporary directory
-        import shutil
-        try:
-            shutil.rmtree(temp_dir)
-        except:
-            pass
+        if temp_dir:
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
 
 @app.post("/query-pdfs")
 async def query_pdfs(
@@ -222,7 +379,7 @@ async def query_pdfs(
             try:
                 result = {
                     "document": chunk.get('pdf_name', 'Unknown'),
-                    "section_title": chunk.get('heading', 'No heading'),
+                    "section_title": chunk.get('heading', NO_HEADING),
                     "refined_text": chunk.get('content', chunk.get('text', 'No content')),
                     "page_number": chunk.get('page_number', 1),
                     "importance_rank": chunk.get('hybrid_score', 0),
@@ -256,19 +413,40 @@ async def query_pdfs(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error querying PDFs: {str(e)}")
 
+@app.get("/project-cache/{project_name}")
+async def get_project_cache(project_name: str):
+    """Return project metadata if persisted (without loading into memory)."""
+    meta = load_project_meta(project_name)
+    if not meta:
+        return {"exists": False}
+    chunks = load_project_chunks(project_name)
+    return {
+        "exists": True,
+        "project_name": project_name,
+        "pdf_files": [f.get("name") for f in meta.get("files", [])],
+        "file_count": len(meta.get("files", [])),
+        "chunk_count": len(chunks),
+        "updated_at": meta.get("updated_at"),
+        "domain": meta.get("domain", "general")
+    }
+
 @app.get("/cache-status/{cache_key}")
 async def get_cache_status(cache_key: str):
     """
     Check if PDF cache is ready
     """
-    if cache_key in pdf_cache:
+    if cache_key in pdf_cache and 'retriever' in pdf_cache[cache_key]:
         cached_data = pdf_cache[cache_key]
         return {
             "ready": True,
             "chunk_count": len(cached_data["chunks"]),
             "pdf_files": cached_data["pdf_files"],
-            "domain": cached_data["domain"]
+            "domain": cached_data["domain"],
+            "project_name": cached_data.get("project_name")
         }
+    elif cache_key in pdf_cache:
+        entry = pdf_cache[cache_key]
+        return {"ready": False, "project_name": entry.get("project_name")}
     else:
         return {"ready": False}
 
@@ -278,10 +456,10 @@ async def analyze_chunks_with_gemini(
     persona: str = Form(...),
     task: str = Form(...),
     k: int = Form(default=5),
-    gemini_api_key: str = Form(...),
+    gemini_api_key: str = os.getenv("VITE_GEMINI_API_KEY"),
     analysis_prompt: str = Form(default="Analyze this document section and provide key insights, important facts, and connections to the user's task."),
     max_chunks_to_analyze: int = Form(default=3),
-    gemini_model: str = Form(default="gemini-2.5-flash")
+    gemini_model: str = Form(default=GEMINI_DEFAULT_MODEL)
 ):
     """
     Query cached PDFs, get top chunks, and analyze them with Gemini AI
@@ -333,7 +511,6 @@ You are analyzing a document section for a user with the following context:
 {analysis_prompt}
 
 Please provide insights that are specifically relevant to this user's persona and task.
-
 Document Section:
 {chunk_content}
 """
@@ -343,7 +520,7 @@ Document Section:
                 # Call Gemini API
                 gemini_response = await call_gemini_api(
                     prompt=contextual_prompt,
-                    api_key=gemini_api_key,
+                    api_key=os.getenv("VITE_GEMINI_API_KEY"),
                     model=gemini_model
                 )
                 
@@ -429,21 +606,22 @@ Document Section:
 
 
 async def call_gemini_api(prompt: str, api_key: str, model: str = "gemini-2.0-flash-exp") -> str:
-    """
-    Call the Gemini API to analyze text
-    """
-    import httpx
-    
+    """Call the Gemini API to analyze text. Falls back gracefully if httpx is missing."""
+    # Dynamic import so requirement is optional
+    try:
+        import httpx  # type: ignore
+        has_httpx = True
+    except ImportError:  # pragma: no cover
+        httpx = None     # type: ignore
+        has_httpx = False
+
+    if not has_httpx:
+        # Return a sentinel string instead of raising so callers can continue
+        return "[Gemini unavailable: 'httpx' not installed on server]"
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ],
+        "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.7,
             "topK": 40,
@@ -451,69 +629,44 @@ async def call_gemini_api(prompt: str, api_key: str, model: str = "gemini-2.0-fl
             "maxOutputTokens": 4096,
         },
         "safetySettings": [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH", 
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            }
-        ]
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        ],
     }
-    
+
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                url,
-                json=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            
+        async with httpx.AsyncClient(timeout=60.0) as client:  # type: ignore
+            response = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
             if not response.is_success:
                 error_text = await response.aread()
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Gemini API error: {response.status_code} - {error_text.decode()}"
-                )
-            
+                return f"[Gemini API error {response.status_code}: {error_text.decode(errors='ignore')[:300]}]"
             data = response.json()
-            
-            # Extract the generated text from Gemini response
-            if "candidates" in data and len(data["candidates"]) > 0:
-                candidate = data["candidates"][0]
-                if "content" in candidate and "parts" in candidate["content"]:
-                    parts = candidate["content"]["parts"]
-                    if len(parts) > 0 and "text" in parts[0]:
-                        return parts[0]["text"]
-            
-            # Fallback if structure is unexpected
-            return "No analysis generated by Gemini"
-            
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=408, detail="Gemini API request timed out")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Network error calling Gemini API: {str(e)}")
+    except Exception as e:  # Network / timeout / other
+        return f"[Gemini request failed: {e}]"
+
+    try:
+        candidates = data.get("candidates") or []
+        if candidates:
+            parts = (candidates[0].get("content") or {}).get("parts") or []
+            if parts and isinstance(parts, list):
+                text = parts[0].get("text")
+                if isinstance(text, str) and text.strip():
+                    return text
+        return "[No analysis generated by Gemini]"
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error calling Gemini API: {str(e)}")
+        return f"[Gemini parse error: {e}]"
 
 
 class PodcastifyRequest(BaseModel):
     analysis: Dict[str, Any]                      # Full JSON from /analyze-chunks-with-gemini
-    gemini_api_key: str
-    gemini_model: Optional[str] = "gemini-2.5-flash"
+    gemini_api_key: str = os.getenv("VITE_GEMINI_API_KEY")
+    gemini_model: Optional[str] = GEMINI_DEFAULT_MODEL
     style: Optional[str] = "engaging, educational, conversational"
     audience: Optional[str] = "general technical audience"
     duration_hint: Optional[str] = "3-5 minutes"
-    host_names: Optional[List[str]] = ["Host A", "Host B"]
+    host_names: Optional[List[str]] = [HOST_A, HOST_B]
 
 @app.post("/podcastify-analysis")
 async def podcastify_analysis(req: PodcastifyRequest):
@@ -533,9 +686,9 @@ async def podcastify_analysis(req: PodcastifyRequest):
         insights = ((req.analysis or {}).get("summary", {}) or {}).get("top_insights", []) or []
         insights = insights[:6]
 
-        hosts = (req.host_names or ["Host A", "Host B"])
+        hosts = (req.host_names or [HOST_A, HOST_B])
         if len(hosts) < 2:
-            hosts = ["Host A", "Host B"]
+            hosts = [HOST_A, HOST_B]
 
         # Build a podcast-style prompt
         prompt = f"""
@@ -578,8 +731,8 @@ Title: <compelling title>
 
         script = await call_gemini_api(
             prompt=prompt,
-            api_key=req.gemini_api_key,
-            model=req.gemini_model or "gemini-2.5-flash"
+            api_key=os.getenv("VITE_GEMINI_API_KEY"),
+            model=req.gemini_model or GEMINI_DEFAULT_MODEL
         )
 
         return {
@@ -587,7 +740,7 @@ Title: <compelling title>
                 "persona": persona,
                 "job_to_be_done": job,
                 "domain": domain,
-                "used_model": req.gemini_model or "gemini-2.5-flash",
+                "used_model": req.gemini_model or GEMINI_DEFAULT_MODEL,
                 "host_names": hosts
             },
             "podcast_script": script
@@ -619,7 +772,7 @@ def _build_ssml(text: str, voice: str, rate: float, pitch: str, lang: str) -> st
 async def tts(req: TTSRequest):
     try:
         try:
-            import azure.cognitiveservices.speech as speechsdk
+            import azure.cognitiveservices.speech as speechsdk  # type: ignore
         except ImportError:
             raise HTTPException(status_code=500, detail="azure-cognitiveservices-speech is not installed. pip install azure-cognitiveservices-speech")
 

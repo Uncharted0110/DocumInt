@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import FlippableCards, { type FlippableCardItem } from './FlippableCards';
 import { Search, FileText, ListChecks, Plus, Loader2, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { updateProjectInsights, loadProject } from '../utils/projectStorage';
+import type { ProjectInsightPersist } from '../utils/projectStorage';
 
 const accentPalette = [
   { cls: 'bg-indigo-50 border-indigo-200', icon: <Lightbulb size={20} /> },
@@ -40,7 +42,9 @@ type GeminiAnalysisResponse = {
   };
 };
 
-const Insights: React.FC = () => {
+interface InsightsProps { projectName?: string; }
+
+const Insights: React.FC<InsightsProps> = ({ projectName }) => {
   // Start with zero cards
   const seed = useMemo<FlippableCardItem[]>(() => [], []);
   const [items, setItems] = useState<FlippableCardItem[]>(seed);
@@ -78,19 +82,25 @@ const Insights: React.FC = () => {
 
   const analyzeWithGemini = async (personaVal: string, jobVal: string, taskVal: string) => {
     const geminiApiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
-    // Read cache key set by Chat
     const cacheKey = sessionStorage.getItem('cache_key') || '';
 
-    if (!personaVal.trim() || !jobVal.trim() || !taskVal.trim() || !cacheKey || !geminiApiKey) {
-      console.error('Missing required fields: persona, job, task, cacheKey, or geminiApiKey');
-      console.log("Key", geminiApiKey)
-      console.log("Cachekey", cacheKey)
+    // Basic required fields (do NOT block on missing Gemini key – backend has fallback)
+    if (!personaVal.trim() || !jobVal.trim() || !taskVal.trim() || !cacheKey) {
+      console.warn('[Insights] Missing required fields (persona/job/task/cacheKey).');
       return null;
     }
 
-    const ready = await checkCacheStatus(cacheKey);
+    // Poll cache readiness (up to ~8s) to avoid premature null
+    const start = Date.now();
+    const maxWaitMs = 8000;
+    const pollInterval = 500;
+    let ready = await checkCacheStatus(cacheKey);
+    while (!ready && Date.now() - start < maxWaitMs) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      ready = await checkCacheStatus(cacheKey);
+    }
     if (!ready) {
-      console.warn('Cache not ready yet.');
+      console.warn('[Insights] Cache still not ready after wait. Aborting analysis.');
       return null;
     }
 
@@ -98,24 +108,35 @@ const Insights: React.FC = () => {
       const formData = new FormData();
       formData.append('cache_key', cacheKey);
       formData.append('persona', personaVal);
+      // Backend expects 'task' (job_to_be_done is only for metadata); keep both for clarity
       formData.append('job_to_be_done', jobVal);
       formData.append('task', taskVal);
       formData.append('k', '5');
-      formData.append('gemini_api_key', geminiApiKey);
       formData.append('max_chunks_to_analyze', '3');
       formData.append('gemini_model', 'gemini-2.5-flash');
-      const defaultPrompt =
-        "Analyze this document section and provide key insights, important facts, and connections to the user's task.";
+      const defaultPrompt = "Analyze this document section and provide key insights, important facts, and connections to the user's task.";
       formData.append('analysis_prompt', defaultPrompt);
+      if (geminiApiKey) {
+        formData.append('gemini_api_key', geminiApiKey);
+      } else {
+        console.info('[Insights] No frontend Gemini key provided; relying on backend environment.');
+      }
 
+      console.log('[Insights] Posting analysis request', { personaVal, jobVal, taskVal, cacheKey, withKey: !!geminiApiKey });
       const response = await fetch('http://localhost:8000/analyze-chunks-with-gemini', {
         method: 'POST',
         body: formData,
       });
-      if (!response.ok) return null;
-      return (await response.json()) as GeminiAnalysisResponse;
+      if (!response.ok) {
+        const txt = await response.text();
+        console.error('[Insights] Analysis request failed', response.status, txt.slice(0, 300));
+        return null;
+      }
+      const data = await response.json() as GeminiAnalysisResponse;
+      console.log('[Insights] Analysis response received', data);
+      return data;
     } catch (e) {
-      console.error('Network error during analysis:', e);
+      console.error('[Insights] Network / processing error during analysis:', e);
       return null;
     }
   };
@@ -207,7 +228,9 @@ const Insights: React.FC = () => {
 
       const audioEl = (u: string) => (
         <div className="w-full">
-          <audio controls className="w-full" src={u} />
+          <audio controls className="w-full" src={u}>
+            <track kind="captions" />
+          </audio>
           <div className="mt-1 text-[11px] text-gray-500">Podcast audio generated</div>
         </div>
       );
@@ -269,7 +292,7 @@ const Insights: React.FC = () => {
             <div>
               <div className="font-semibold text-gray-800 mb-1">Top Insights</div>
               <ul className="list-disc ml-5 space-y-1">
-                {topInsights.map((ins, i) => <li key={i}>{ins}</li>)}
+                {topInsights.map(ins => <li key={ins.slice(0,40)}>{ins}</li>)}
               </ul>
             </div>
           )}
@@ -277,8 +300,8 @@ const Insights: React.FC = () => {
             <div>
               <div className="font-semibold text-gray-800 mb-1">Sources</div>
               <ul className="list-disc ml-5 space-y-1">
-                {results.slice(0, 5).map((r, i) => (
-                  <li key={i}>
+                {results.slice(0, 5).map(r => (
+                  <li key={r.document + r.section_title}>
                     <span className="font-medium">{r.document}</span>
                     {r.section_title ? ` — ${r.section_title}` : ''} (p.{r.page_number})
                   </li>
@@ -290,8 +313,8 @@ const Insights: React.FC = () => {
             <div>
               <div className="font-semibold text-gray-800 mb-1">Details</div>
               <div className="space-y-3">
-                {analyses.slice(0, 3).map((a, i) => (
-                  <div key={i} className="rounded border p-2 bg-gray-50">
+                {analyses.slice(0, 3).map(a => (
+                  <div key={(a.document||'doc') + (a.section_title||'sec')} className="rounded border p-2 bg-gray-50">
                     <div className="text-gray-700 text-xs mb-1">
                       {a.document} — {a.section_title} (p.{a.page_number})
                     </div>
@@ -359,7 +382,7 @@ const Insights: React.FC = () => {
         )
       );
       if (analysisById[id]) {
-        generatePodcast(id, analysisById[id]!);
+        generatePodcast(id, analysisById[id]);
       }
     }
   };
@@ -375,6 +398,49 @@ const Insights: React.FC = () => {
     navigate('/mindmap', { state: { insightsData: { persona, chunks } } });
   };
 
+  // Load persisted insights
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!projectName) return;
+      const loaded = await loadProject(projectName);
+      if (cancelled) return;
+      const persisted = loaded?.insights || [];
+      if (persisted.length) {
+        // Reconstruct items from persisted
+        const reconstructed: FlippableCardItem[] = persisted.map(p => ({
+          id: p.id,
+          frontTitle: p.persona,
+            frontSubtitle: p.job,
+            accentColor: p.accentColor,
+            frontExpandedContent: <div className="text-sm text-gray-700 whitespace-pre-wrap">Recovered insight. Flip or expand for details (analysis not restored inline).</div>,
+            backContent: <div className="text-xs text-gray-600">Flip to regenerate podcast if needed.</div>,
+            backExpandedContent: <div className="text-sm text-gray-600">Flip to regenerate podcast.</div>
+        }));
+        setItems(reconstructed);
+        setCounter(reconstructed.length);
+        setAnalysisById({});
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [projectName]);
+
+  // Persist insights whenever items change
+  useEffect(() => {
+    if (!projectName) return;
+    const persist: ProjectInsightPersist[] = items.map(it => ({
+      id: it.id,
+      persona: it.frontTitle,
+      job: it.frontSubtitle || '',
+      task: '',
+      accentColor: it.accentColor,
+      createdAt: new Date().toISOString()
+    }));
+    updateProjectInsights(projectName, persist);
+  }, [items, projectName]);
+
+  const deleteInsight = (id: string) => setItems(prev => prev.filter(p => p.id !== id));
+
   return (
     <div className="w-full">
       <div className="mb-2 flex items-center justify-between">
@@ -382,8 +448,13 @@ const Insights: React.FC = () => {
       </div>
       <div ref={scrollRef} className="max-h-155 overflow-y-auto pr-1">
         <div className="flex flex-col gap-3">
-          {items.map((item, idx) => (
-            <div key={item.id} className="insight-card">
+          {items.map((item) => (
+            <div key={item.id} className="insight-card relative">
+              <button
+                className="absolute -top-2 -right-2 bg-white border rounded-full w-6 h-6 flex items-center justify-center text-gray-500 hover:text-red-600 shadow"
+                title="Delete insight"
+                onClick={() => deleteInsight(item.id)}
+              >×</button>
               {/* ...existing card content... */}
               <button
                 onClick={() => handleViewMindMap(analysisById[item.id])}
@@ -420,8 +491,9 @@ const Insights: React.FC = () => {
             >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Persona</label>
+                  <label htmlFor="personaInput" className="block text-xs text-gray-600 mb-1">Persona</label>
                   <input
+                    id="personaInput"
                     className="w-full rounded border px-2 py-1 text-sm"
                     value={persona}
                     onChange={(e) => setPersona(e.target.value)}
@@ -430,8 +502,9 @@ const Insights: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Job</label>
+                  <label htmlFor="jobInput" className="block text-xs text-gray-600 mb-1">Job</label>
                   <input
+                    id="jobInput"
                     className="w-full rounded border px-2 py-1 text-sm"
                     value={job}
                     onChange={(e) => setJob(e.target.value)}
@@ -441,8 +514,9 @@ const Insights: React.FC = () => {
                 </div>
                 <div className="md:col-span-1" />
                 <div className="md:col-span-3">
-                  <label className="block text-xs text-gray-600 mb-1">Task / Prompt</label>
+                  <label htmlFor="taskInput" className="block text-xs text-gray-600 mb-1">Task / Prompt</label>
                   <textarea
+                    id="taskInput"
                     className="w-full rounded border px-2 py-1 text-sm min-h-20"
                     value={task}
                     onChange={(e) => setTask(e.target.value)}

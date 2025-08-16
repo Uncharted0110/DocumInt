@@ -27,20 +27,21 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const pdfViewerRef = useRef<HTMLDivElement>(null);
   const lastNavigationPageRef = useRef<number | undefined>(undefined);
 
+  // Use the custom navigation hook; provide a docVersion so internal state resets when pdfUrl changes
+  const { navigateToPage } = useAdobePDFNavigation({
+    view,
+    viewer,
+    apis,
+    containerRef: pdfViewerRef,
+    docVersion: pdfUrl || pdfFileName // fallback to name if url not yet ready
+  });
+
   // Extract text and analyze with Gemini whenever pdfUrl changes
   // useEffect(() => {
   //   if (pdfUrl) {
   //     extractAndAnalyzePDF(pdfUrl);
   //   }
   // }, [pdfUrl]);
-
-  // Use the custom navigation hook
-  const { navigateToPage } = useAdobePDFNavigation({
-    view,
-    viewer,
-    apis,
-    containerRef: pdfViewerRef
-  });
 
   // Consider the viewer ready as soon as APIs are available (unblocks UI banner)
   useEffect(() => {

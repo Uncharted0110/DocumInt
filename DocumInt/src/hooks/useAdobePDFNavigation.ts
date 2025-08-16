@@ -8,13 +8,28 @@ interface UseAdobePDFNavigationProps {
   // Pre-fetched APIs (optional), e.g., from viewer.getAPIs()
   apis?: any;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  // A changing identifier per loaded document (e.g., url or name) to allow internal reset
+  docVersion?: string;
 }
 
-export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef }: UseAdobePDFNavigationProps) => {
+export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef, docVersion }: UseAdobePDFNavigationProps) => {
   const adobeAPIsRef = useRef<any>(null);
   const navigationQueueRef = useRef<number[]>([]);
   const hasAPIsRef = useRef<boolean>(false);
   const hasReadyEventRef = useRef<boolean>(false);
+
+  // Reset internal readiness when a new document loads to avoid using stale APIs
+  useEffect(() => {
+    if (docVersion) {
+      // Clear previous document state so new one must re-acquire APIs & readiness events
+      adobeAPIsRef.current = null;
+      hasAPIsRef.current = false;
+      hasReadyEventRef.current = false;
+      navigationQueueRef.current = [];
+      // (Optional) expose reset marker
+      (window as any).__ADOBE_LAST_RESET__ = docVersion;
+    }
+  }, [docVersion]);
 
   const canNavigate = useCallback(() => hasAPIsRef.current && hasReadyEventRef.current && !!adobeAPIsRef.current, []);
 
@@ -172,9 +187,9 @@ export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef }: UseA
       if (typeof a.getCurrentPage === 'function') {
         try {
           // getCurrentPage might be sync or async depending on impl
-          const val = a.getCurrentPage();
-          const n = typeof (val as any)?.then === 'function' ? await (val as any) : val;
-          if (typeof n === 'number') return n;
+            const val = a.getCurrentPage();
+            const n = typeof (val as any)?.then === 'function' ? await (val as any) : val;
+            if (typeof n === 'number') return n;
         } catch { /* ignore */ }
       }
       const loc = await a.getCurrentLocation?.();

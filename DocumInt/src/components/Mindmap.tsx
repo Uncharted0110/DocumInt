@@ -287,7 +287,16 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
         if (!confirm(`Delete "${d.data.label}"?`)) return;
         deleteNodeById(d.data.id);
       });
-
+    allNodes.on("click", (event: MouseEvent, d: any) => {
+      if ((event as any).detail && (event as any).detail > 1) return; // ignore dblclick
+      if (isDraggingRef.current) return;
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(d.data.id)) next.delete(d.data.id);
+        else next.add(d.data.id);
+        return next;
+      });
+    });
     // Drag behavior (zoom-aware, thresholded) for non-root nodes
     const dragBehavior = d3
       .drag<SVGGElement, any>()

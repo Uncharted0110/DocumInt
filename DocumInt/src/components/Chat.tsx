@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Send, MessageCircle, X, ChevronUp, Star, Clock, User, Target } from 'lucide-react';
 
 interface ChatMessage {
@@ -32,6 +32,7 @@ interface ChatProps {
   onSendMessage: (message: string, persona?: string, task?: string, results?: QueryResult[]) => void;
   onTabChange: (tab: string) => void;
   onNavigateToPage?: (page: number) => void;
+  projectName?: string; // new
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -45,41 +46,46 @@ const Chat: React.FC<ChatProps> = ({
   onSendMessage,
   onTabChange,
   onNavigateToPage,
+  projectName,
 }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [cacheKey, setCacheKey] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [persona, setPersona] = useState(initialPersona || '');
   const [task, setTask] = useState(initialTask || '');
+  const lastSigRef = useRef<string>('');
 
-  // Cache PDFs when they change
+  // Cache PDFs when they change (idempotent)
   useEffect(() => {
-    if (pdfFiles.length > 0) {
-      cachePDFs();
-    }
+    if (!pdfFiles.length) return;
+    const sig = pdfFiles.map(f => f.name + ':' + f.size).sort().join('|');
+    if (sig === lastSigRef.current) return; // no actual change
+    lastSigRef.current = sig;
+    cachePDFs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfFiles]);
 
   const cachePDFs = async () => {
     try {
       setIsProcessing(true);
       const formData = new FormData();
-      
+      if (projectName) formData.append('project_name', projectName);
       pdfFiles.forEach((file) => {
         formData.append('files', file);
       });
-
+      console.log('[Chat] Calling /cache-pdfs with', pdfFiles.length, 'files for project', projectName);
       const response = await fetch('http://localhost:8000/cache-pdfs', {
         method: 'POST',
         body: formData,
       });
-
       if (response.ok) {
         const data = await response.json();
         setCacheKey(data.cache_key);
-        sessionStorage.setItem('cache_key', data.cache_key)
+        sessionStorage.setItem('cache_key', data.cache_key);
         console.log('PDFs cached successfully:', data);
       } else {
-        console.error('Failed to cache PDFs');
+        const text = await response.text();
+        console.error('Failed to cache PDFs', response.status, text);
       }
     } catch (error) {
       console.error('Error caching PDFs:', error);

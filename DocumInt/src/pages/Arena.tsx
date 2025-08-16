@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     ChevronLeft, ChevronRight, BrainCircuit
 } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import PDFViewer from '../components/PDFViewer';
 import Chat from '../components/Chat';
 import PDFListSidebar from '../components/PDFListSidebar';
 import PDFOutlineSidebar from '../components/PDFOutlineSidebar';
 import MindMap from '../components/Mindmap';
 import Insights from '../components/Insights';
+import { saveProjectState } from '../utils/projectStorage';
 
 // Extend window type to include AdobeDC
 declare global {
@@ -22,9 +23,12 @@ interface LocationState {
     files: File[];
 }
 
+const sameFile = (a: File, b: File) => a.name === b.name && a.size === b.size;
+
 const Arena = () => {
     // State management
     const location = useLocation();
+    const navigate = useNavigate();
     const { projectName, files } = location.state as LocationState;
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -41,7 +45,6 @@ const Arena = () => {
     const [pdfFileName, setPdfFileName] = useState('');
     const [isAdobeLoaded, setIsAdobeLoaded] = useState(false);
     const [navigationPage, setNavigationPage] = useState<number | undefined>(undefined);
-    const [, setPdfFile] = useState<File | null>(null);
 
     // Chat state
     const [chatMessage, setChatMessage] = useState('');
@@ -111,7 +114,6 @@ const Arena = () => {
                 if (persistedFiles.length > 0) {
                     const firstPdf = persistedFiles[0];
                     setSelectedPdf(firstPdf);
-                    setPdfFile(firstPdf);
                     setPdfFileName(firstPdf.name);
                 }
             } else {
@@ -121,7 +123,6 @@ const Arena = () => {
                 if (files && files.length > 0) {
                     const firstPdf = files[0];
                     setSelectedPdf(firstPdf);
-                    setPdfFile(firstPdf);
                     setPdfFileName(firstPdf.name);
 
                     // Save initial state
@@ -135,7 +136,6 @@ const Arena = () => {
             if (files && files.length > 0) {
                 const firstPdf = files[0];
                 setSelectedPdf(firstPdf);
-                setPdfFile(firstPdf);
                 setPdfFileName(firstPdf.name);
             }
         }
@@ -188,6 +188,16 @@ const Arena = () => {
         };
     }, [pdfList, selectedPdf, isInitialized]);
 
+    // Persist project state when pdfList or chatHistory changes (debounced)
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            if (projectName) {
+                saveProjectState(projectName, { pdfFiles: pdfList, persona: undefined, task: undefined, chatHistory: chatHistory.map(m => ({ ...m, timestamp: m.timestamp })) as any });
+            }
+        }, 500);
+        return () => clearTimeout(timeout);
+    }, [pdfList, chatHistory, projectName]);
+
     // Handlers
     const handlePdfSelection = (file: File) => {
         const idx = pdfList.indexOf(file);
@@ -215,30 +225,14 @@ const Arena = () => {
         // Convert FileList to Array
         const newFiles = Array.from(filesInput).filter(file => file.type === 'application/pdf');
 
-        setPdfList(prev => {
-            const updatedList = [...prev];
-
-            newFiles.forEach(file => {
-                const exists = updatedList.some(
-                    existingFile => existingFile.name === file.name && existingFile.size === file.size
-                );
-                if (!exists) {
-                    updatedList.push(file);
-                }
-            });
-
-            return updatedList;
-        });
+        setPdfList(prev => addNewFiles(prev, newFiles));
 
         // If the user selected only one file and it's new, set it as selected
         if (newFiles.length === 1) {
             const file = newFiles[0];
-            const alreadyExists = pdfList.some(
-                existingFile => existingFile.name === file.name && existingFile.size === file.size
-            );
+            const alreadyExists = pdfList.some(existingFile => sameFile(existingFile, file));
             if (!alreadyExists) {
                 setSelectedPdf(file);
-                setPdfFile(file);
                 setPdfFileName(file.name);
                 setNavigationPage(undefined);
             }
@@ -259,7 +253,6 @@ const Arena = () => {
         if (newList.length === 0) {
             // No PDFs left
             setSelectedPdf(null);
-            setPdfFile(null);
             setPdfFileName('');
             setPdfUrl(null);
         } else if (file === selectedPdf) {
@@ -275,7 +268,6 @@ const Arena = () => {
 
             const newSelectedPdf = newList[newSelectedIndex];
             setSelectedPdf(newSelectedPdf);
-            setPdfFile(newSelectedPdf);
             setPdfFileName(newSelectedPdf.name);
             setNavigationPage(undefined);
         }
@@ -333,6 +325,7 @@ const Arena = () => {
                                 isMinimized={isSidebarMinimized}
                                 onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
                                 onRemovePdf={handleRemoveSidebarPdf}
+                                onBack={() => navigate('/')}
                             />
 
                             {/* PDF Outline Sidebar */}
@@ -396,14 +389,15 @@ const Arena = () => {
                         {/* Chat Panel */}
                         <div className={`lg:static lg:w-96 lg:z-auto lg:translate-x-0 flex flex-col`}>
                             <div className="p-3 pb-2 border-b border-gray-200 bg-gray-50">
-                                <Insights />
+                                <Insights projectName={projectName} />
                             </div>
                             <div className="min-h-0 flex-1">
                                 <Chat
                                     chatHistory={chatHistory}
                                     chatMessage={chatMessage}
                                     activeTab={activeTab}
-                                    pdfFiles={files}
+                                    pdfFiles={pdfList} // changed from original 'files' to dynamic pdfList
+                                    projectName={projectName} // added to ensure backend receives project scoping
                                     onMessageChange={setChatMessage}
                                     onSendMessage={(message, persona, task, results) => {
                                         if (message.trim()) {
@@ -441,3 +435,11 @@ const Arena = () => {
 };
 
 export default Arena;
+
+const addNewFiles = (current: File[], incoming: File[]) => {
+    const updated = [...current];
+    for (const f of incoming) {
+        if (!updated.some(ex => sameFile(ex, f))) updated.push(f);
+    }
+    return updated;
+};
