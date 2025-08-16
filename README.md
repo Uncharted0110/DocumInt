@@ -80,7 +80,7 @@ DocumInt/
 - Node.js 18+  
 - npm 9+  
 
-### Optional Keys
+### Required API Keys
 - **Adobe PDF Embed API** → `VITE_ADOBE_API_KEY`  
 - **Google Gemini API** → `VITE_GEMINI_API_KEY`  
 - **Azure Speech (TTS)** → `SPEECH_KEY`, `SPEECH_REGION`  
@@ -114,15 +114,7 @@ Frontend runs on: `http://localhost:5173`
 
 ---
 
-### Docker Execution (Optional)
-1. Build the Docker image:
-```bash
-docker build -t documint-backend ./Backend
-```
-2. Run the backend container:
-```bash
-docker run --rm -p 8000:8000 documint-backend
-```
+
 
 ---
 
@@ -141,40 +133,7 @@ docker run --rm -p 8000:8000 documint-backend
 
 ---
 
-## 📥 Input/Output Format
 
-### Input
-```json
-{
-  "persona": {"role": "Researcher"},
-  "task": {"description": "Summarize findings on topic X"},
-  "documents": [{"filename": "doc.pdf", "title": "Title"}]
-}
-```
-
-### Output
-```json
-{
-  "metadata": {
-    "persona": "Researcher",
-    "job_to_be_done": "Summarize findings on topic X"
-  },
-  "extracted_sections": [
-    {
-      "document": "doc.pdf",
-      "section_title": "Heading",
-      "page_number": 5
-    }
-  ],
-  "subsection_analysis": [
-    {
-      "document": "doc.pdf",
-      "refined_text": "AI-generated insights",
-      "page_number": 5
-    }
-  ]
-}
-```
 
 ---
 
@@ -205,13 +164,7 @@ docker run --rm -p 8000:8000 documint-backend
 
 ---
 
-## 📊 Performance Metrics
-- **Outline Extraction**: ~1–2s per PDF  
-- **Hybrid Retrieval Build**: 2–4s per document  
-- **Region Insights**: <3s latency (Gemini call)  
-- **Domain Detection Accuracy**: ~95%  
-- **Query Expansion Coverage**: ~80%  
-- **Result Diversity**: >90% unique chunks  
+ 
 
 ---
 
