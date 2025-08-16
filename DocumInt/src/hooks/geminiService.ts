@@ -248,3 +248,100 @@ export async function analyzeWithCustomPrompt(
     return [];
   }
 }
+
+/**
+ * Lightweight helper: get insights for an arbitrary text snippet (no PDF extraction)
+ */
+export async function getInsightsForText(
+  text: string,
+  userConfig: GeminiConfig = {}
+): Promise<string> {
+  const config: Required<GeminiConfig> = { ...DEFAULT_CONFIG, ...userConfig } as Required<GeminiConfig>;
+  if (!config.apiKey) {
+    console.error("Gemini API key not found. Please set VITE_GEMINI_API_KEY in your environment variables.");
+    return "";
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+  const prompt = `You are an expert document analyst. Analyze the following selected passage and provide:\n- Key insights\n- Did-you-know facts\n- Contradictions or caveats\n- Related context the reader should know\n\nSelected Text:\n${text}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [ { parts: [{ text: prompt }] } ]
+      })
+    });
+    if (!response.ok) return "";
+    const data = await response.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  } catch (e) {
+    console.error("Gemini insight error:", e);
+    return "";
+  }
+}
+
+// Internal: extract text items that fall inside a device-space rectangle
+async function extractTextFromRegion(
+  pdfUrl: string,
+  pageNumberOneBased: number,
+  viewerSize: { width: number; height: number },
+  regionInIframe: { x: number; y: number; width: number; height: number }
+): Promise<string> {
+  const loadingTask = pdfjsLib.getDocument(pdfUrl);
+  const pdf = await loadingTask.promise;
+  const page = await pdf.getPage(pageNumberOneBased);
+  const unscaled = page.getViewport({ scale: 1 });
+  const scale = viewerSize.width > 0 ? (viewerSize.width / unscaled.width) : 1;
+  const viewport = page.getViewport({ scale });
+
+  const textContent = await page.getTextContent();
+  const transformPoint = (x: number, y: number) => {
+    const [a, b, c, d, e, f] = viewport.transform;
+    return {
+      X: a * x + c * y + e,
+      Y: b * x + d * y + f,
+    };
+  };
+  const within = (bx: number, by: number, bw: number, bh: number) => {
+    return !(bx + bw < regionInIframe.x || bx > regionInIframe.x + regionInIframe.width || by + bh < regionInIframe.y || by > regionInIframe.y + regionInIframe.height);
+  };
+
+  // Collect items intersecting the region
+  const items = textContent.items as any[];
+  const picked: Array<{ x: number; y: number; str: string } > = [];
+  for (const it of items) {
+    const t = it.transform as number[]; // [a,b,c,d,e,f]
+    const fontHeight = Math.hypot(t[2], t[3]);
+    const x = t[4];
+    const yTop = t[5] - fontHeight;
+    const { X, Y } = transformPoint(x, yTop);
+    const width = (it.width || 0) * scale;
+    const height = fontHeight * scale;
+    if (within(X, Y, width, height)) {
+      picked.push({ x: X, y: Y, str: it.str });
+    }
+  }
+
+  // Sort roughly top-to-bottom then left-to-right
+  picked.sort((a, b) => (Math.abs(a.y - b.y) < 6 ? a.x - b.x : a.y - b.y));
+  const text = picked.map(p => p.str).join(" ").replace(/\s+/g, " ").trim();
+  try { await pdf.destroy(); } catch {}
+  return text;
+}
+
+/**
+ * Get insights for a selected region (device-space rectangle) on the given page.
+ */
+export async function getInsightsForRegion(
+  pdfUrl: string,
+  pageNumberOneBased: number,
+  viewerSize: { width: number; height: number },
+  regionInIframe: { x: number; y: number; width: number; height: number },
+  userConfig: GeminiConfig = {}
+): Promise<string> {
+  const text = await extractTextFromRegion(pdfUrl, pageNumberOneBased, viewerSize, regionInIframe);
+  if (!text) return "";
+  return getInsightsForText(text, userConfig);
+}

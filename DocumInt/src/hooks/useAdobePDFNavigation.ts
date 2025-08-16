@@ -8,9 +8,11 @@ interface UseAdobePDFNavigationProps {
   // Pre-fetched APIs (optional), e.g., from viewer.getAPIs()
   apis?: any;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  onTextSelected?: (text: string) => void;
+  onTextCleared?: () => void;
 }
 
-export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef }: UseAdobePDFNavigationProps) => {
+export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef, onTextSelected, onTextCleared }: UseAdobePDFNavigationProps) => {
   const adobeAPIsRef = useRef<any>(null);
   const navigationQueueRef = useRef<number[]>([]);
   const hasAPIsRef = useRef<boolean>(false);
@@ -152,6 +154,16 @@ export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef }: UseA
                 hasReadyEventRef.current = true;
                 flushQueueIfPossible();
               }
+              // Capture text selection events if available
+              if (event.type === 'TEXT_SELECTED' || event.type === 'SELECTION_CHANGE' || event.type === 'TEXT_COPY') {
+                try {
+                  const text = (event?.data?.text || event?.data?.selectedText || '').toString();
+                  if (text && onTextSelected) onTextSelected(text);
+                } catch {}
+              }
+              if (event.type === 'TEXT_DESELECTED' || event.type === 'SELECTION_CLEARED') {
+                try { onTextCleared && onTextCleared(); } catch {}
+              }
             },
             { enablePDFAnalytics: false }
           );
@@ -162,7 +174,7 @@ export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef }: UseA
     };
 
     setupNavigation();
-  }, [view, flushQueueIfPossible]);
+  }, [view, flushQueueIfPossible, onTextSelected, onTextCleared]);
 
   // Helper to get current page (prefer getCurrentPage, fallback to location)
   const getCurrentPageNumber = useCallback(async (): Promise<number | undefined> => {

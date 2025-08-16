@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, AlertCircle, File } from 'lucide-react';
 import { useAdobePDFNavigation } from '../hooks/useAdobePDFNavigation';
-import { extractAndAnalyzePDF } from '../hooks/geminiService'
+import { getInsightsForText, getInsightsForRegion } from '../hooks/geminiService'
 
 interface PDFViewerProps {
   pdfFile: File | null;
@@ -27,6 +27,19 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const pdfViewerRef = useRef<HTMLDivElement>(null);
   const lastNavigationPageRef = useRef<number | undefined>(undefined);
 
+  // Inline insights state
+  const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [selectedText, setSelectedText] = useState<string>("");
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightText, setInsightText] = useState<string>("");
+  const [showManualInsights, setShowManualInsights] = useState(false);
+  const [manualText, setManualText] = useState("");
+  const [manualLoading, setManualLoading] = useState(false);
+  const [regionMode, setRegionMode] = useState(false);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragRect, setDragRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
   // Extract text and analyze with Gemini whenever pdfUrl changes
   // useEffect(() => {
   //   if (pdfUrl) {
@@ -39,7 +52,15 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     view,
     viewer,
     apis,
-    containerRef: pdfViewerRef
+    containerRef: pdfViewerRef,
+    onTextSelected: (text) => {
+      setSelectedText((text || '').trim());
+      // Reset insight view to allow immediate use
+      setInsightText("");
+    },
+    onTextCleared: () => {
+      setSelectedText("");
+    }
   });
 
   // Consider the viewer ready as soon as APIs are available (unblocks UI banner)
@@ -56,6 +77,14 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       setViewer(null);
       setApis(null);
       setIsViewerReady(false);
+  // Reset inline insights
+  setSelectionRect(null);
+  setSelectedText("");
+  setInsightText("");
+  setInsightLoading(false);
+  setRegionMode(false);
+  setDragStart(null);
+  setDragRect(null);
       setTimeout(() => {
         initializePDFViewer();
       }, 100);
@@ -168,10 +197,93 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
               .catch(() => { /* ignore */ });
           }
         } catch { /* ignore */ }
+
+        // Attach selection listeners within the viewer iframe to capture text selections
+        try {
+          const container = pdfViewerRef.current!;
+          // The Adobe viewer renders inside an iframe under our div; poll briefly to hook events
+          const tryHook = () => {
+            const iframe = container.querySelector('iframe') as HTMLIFrameElement | null;
+            if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+              setTimeout(tryHook, 300);
+              return;
+            }
+            const doc = iframe.contentDocument;
+
+            // Clear previous to avoid duplicate handlers
+            doc.removeEventListener('mouseup', handleMouseUp as any, true);
+            doc.addEventListener('mouseup', handleMouseUp as any, true);
+
+            // Also hide when clicking elsewhere
+            doc.removeEventListener('mousedown', handleMouseDownHide as any, true);
+            doc.addEventListener('mousedown', handleMouseDownHide as any, true);
+          };
+          tryHook();
+        } catch {}
       })
       .catch((e: any) => {
         console.error('previewFile failed:', e);
       });
+  };
+
+  // Hide overlay on new click
+  const handleMouseDownHide = () => {
+    setSelectionRect(null);
+  };
+
+  // On mouse up, capture selection
+  const handleMouseUp = () => {
+    try {
+      // Selection is in iframe; get selection from the iframe's window
+      const iframe = pdfViewerRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+      if (!iframe || !iframe.contentWindow || !iframe.contentDocument) return;
+      const sel = iframe.contentWindow.getSelection();
+      if (!sel || sel.isCollapsed) return;
+      const text = sel.toString().trim();
+      if (!text) return;
+
+      // Compute bounding rect relative to our container
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const iframeRect = iframe.getBoundingClientRect();
+      const containerRect = pdfViewerRef.current!.getBoundingClientRect();
+      const x = rect.left - iframeRect.left + (iframeRect.left - containerRect.left);
+      const y = rect.top - iframeRect.top + (iframeRect.top - containerRect.top);
+
+      setSelectedText(text);
+      setInsightText("");
+      setInsightLoading(false);
+      setSelectionRect({ x, y, width: rect.width, height: rect.height });
+    } catch {}
+  };
+
+  // Helper: read current selection from iframe and compute rect
+  const readSelectionFromIframe = (): { text: string; rect: { x: number; y: number; width: number; height: number } } | null => {
+    try {
+      const iframe = pdfViewerRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+      if (!iframe || !iframe.contentWindow || !iframe.contentDocument) return null;
+      const sel = iframe.contentWindow.getSelection();
+      if (!sel || sel.isCollapsed) return null;
+      const text = sel.toString().trim();
+      if (!text) return null;
+      const range = sel.getRangeAt(0);
+      const r = range.getBoundingClientRect();
+      const iframeRect = iframe.getBoundingClientRect();
+      const containerRect = pdfViewerRef.current!.getBoundingClientRect();
+      const x = r.left - iframeRect.left + (iframeRect.left - containerRect.left);
+      const y = r.top - iframeRect.top + (iframeRect.top - containerRect.top);
+      return { text, rect: { x, y, width: r.width, height: r.height } };
+    } catch {
+      return null;
+    }
+  };
+
+  const triggerInsights = async () => {
+    if (!selectedText) return;
+    setInsightLoading(true);
+    const result = await getInsightsForText(selectedText);
+    setInsightText(result || "No insights generated.");
+    setInsightLoading(false);
   };
 
   useEffect(() => {
@@ -196,6 +308,48 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
               alignItems: 'stretch'
             }}
           />
+          {/* Inline Insights Overlay */}
+          {selectionRect && (
+            <div
+              className="absolute bg-white border border-gray-300 rounded-md shadow-lg p-2 z-50"
+              style={{
+                top: Math.max(8, selectionRect.y + selectionRect.height + 8),
+                left: Math.max(8, selectionRect.x),
+                maxWidth: 360,
+                width: 360
+              }}
+            >
+              {!insightText ? (
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-gray-600 truncate pr-2" title={selectedText}>
+                    {selectedText.slice(0, 80)}{selectedText.length > 80 ? '…' : ''}
+                  </div>
+                  <button
+                    onClick={triggerInsights}
+                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    disabled={insightLoading}
+                  >
+                    {insightLoading ? 'Analyzing…' : 'Get insights'}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-800">Insights</span>
+                    <button
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                      onClick={() => setSelectionRect(null)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-auto">
+                    {insightText}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {!isViewerReady && viewer && (
             <div className="absolute top-4 right-4 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-sm">
               Preparing navigation...
@@ -222,6 +376,175 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Floating Insights Button (fallback) */}
+      {pdfFile && (
+        <button
+          onClick={async () => {
+            // Try to read selection from iframe live
+            const sel = readSelectionFromIframe();
+            if (sel) {
+              setSelectedText(sel.text);
+              setSelectionRect(sel.rect);
+              setInsightText("");
+              setInsightLoading(true);
+              const res = await getInsightsForText(sel.text);
+              setInsightText(res || "No insights generated.");
+              setInsightLoading(false);
+            } else if (selectedText) {
+              // Use last captured selection
+              setSelectionRect({ x: 16, y: 16, width: 0, height: 0 });
+              setInsightText("");
+              setInsightLoading(true);
+              const res = await getInsightsForText(selectedText);
+              setInsightText(res || "No insights generated.");
+              setInsightLoading(false);
+            } else {
+              // Fallback to manual panel
+              setShowManualInsights(true);
+            }
+          }}
+          className="absolute top-4 right-4 bg-blue-600 text-white text-xs px-3 py-2 rounded shadow hover:bg-blue-700 z-40"
+          title="Analyze selected text"
+        >
+          Insights
+        </button>
+      )}
+
+      {/* Region selection toggle */}
+      {pdfFile && (
+        <button
+          onClick={() => {
+            setRegionMode((v) => !v);
+            setDragStart(null);
+            setDragRect(null);
+          }}
+          className={`absolute top-4 right-28 text-xs px-3 py-2 rounded shadow z-40 ${regionMode ? 'bg-amber-500 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+          title="Drag to select a region for insights"
+        >
+          {regionMode ? 'Region: ON' : 'Region select'}
+        </button>
+      )}
+
+      {/* Manual Insights Panel */}
+      {showManualInsights && (
+        <div className="absolute top-16 right-4 w-96 bg-white border border-gray-300 rounded-md shadow-lg p-3 z-50">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-gray-800">Get insights</span>
+            <button className="text-xs text-gray-500 hover:text-gray-700" onClick={() => setShowManualInsights(false)}>Close</button>
+          </div>
+          <div className="space-y-2">
+            <textarea
+              className="w-full h-28 border border-gray-300 rounded p-2 text-sm"
+              placeholder="Paste selected text here..."
+              value={manualText}
+              onChange={(e) => setManualText(e.target.value)}
+            />
+            <div className="flex items-center justify-between">
+              <button
+                className="text-xs text-blue-600 hover:text-blue-700"
+                onClick={async () => {
+                  try {
+                    const clip = await navigator.clipboard.readText();
+                    if (clip) setManualText(clip);
+                  } catch {}
+                }}
+              >
+                Paste from clipboard
+              </button>
+              <button
+                className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                disabled={!manualText.trim() || manualLoading}
+                onClick={async () => {
+                  setManualLoading(true);
+                  const res = await getInsightsForText(manualText.trim());
+                  setManualLoading(false);
+                  setInsightText(res || "No insights generated.");
+                  setSelectionRect({ x: 16, y: 16, width: 0, height: 0 });
+                  setShowManualInsights(false);
+                }}
+              >
+                {manualLoading ? 'Analyzing…' : 'Get insights'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Region selection overlay inside the iframe area */}
+      {pdfFile && regionMode && (
+        <div
+          ref={overlayRef}
+          className="absolute inset-0 z-40"
+          onMouseDown={(e) => {
+            // Map mouse to iframe coordinates
+            const iframe = pdfViewerRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+            if (!iframe) return;
+            const iframeRect = iframe.getBoundingClientRect();
+            const x = e.clientX - iframeRect.left;
+            const y = e.clientY - iframeRect.top;
+            if (x < 0 || y < 0 || x > iframeRect.width || y > iframeRect.height) return;
+            setDragStart({ x, y });
+            setDragRect({ x, y, width: 0, height: 0 });
+          }}
+          onMouseMove={(e) => {
+            if (!dragStart) return;
+            const iframe = pdfViewerRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+            if (!iframe) return;
+            const iframeRect = iframe.getBoundingClientRect();
+            const curX = Math.max(0, Math.min(e.clientX - iframeRect.left, iframeRect.width));
+            const curY = Math.max(0, Math.min(e.clientY - iframeRect.top, iframeRect.height));
+            const x = Math.min(dragStart.x, curX);
+            const y = Math.min(dragStart.y, curY);
+            const width = Math.abs(curX - dragStart.x);
+            const height = Math.abs(curY - dragStart.y);
+            setDragRect({ x, y, width, height });
+          }}
+          onMouseUp={async () => {
+            if (!dragRect || dragRect.width < 4 || dragRect.height < 4) {
+              setDragStart(null);
+              setDragRect(null);
+              setRegionMode(false);
+              return;
+            }
+            // Determine current page (1-based)
+            let pageNum = 1;
+            try {
+              const api = apis || (await viewer?.getAPIs?.());
+              const p = await api?.getCurrentPage?.();
+              pageNum = typeof p === 'number' ? p : 1;
+            } catch {}
+            const iframe = pdfViewerRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+            if (!iframe) return;
+            const iframeRect = iframe.getBoundingClientRect();
+            setInsightLoading(true);
+            setInsightText('');
+            try {
+              const res = await getInsightsForRegion(
+                pdfUrl!,
+                pageNum,
+                { width: iframeRect.width, height: iframeRect.height },
+                dragRect
+              );
+              setInsightText(res || 'No insights generated.');
+              setSelectionRect({ x: 16, y: 16, width: 0, height: 0 });
+            } catch {
+              setInsightText('No insights generated.');
+            }
+            setInsightLoading(false);
+            setRegionMode(false);
+            setDragStart(null);
+            setDragRect(null);
+          }}
+        >
+          {dragRect && (
+            <div
+              className="absolute border-2 border-amber-500 bg-amber-200 bg-opacity-20 pointer-events-none"
+              style={{ top: dragRect.y, left: dragRect.x, width: dragRect.width, height: dragRect.height }}
+            />
+          )}
         </div>
       )}
     </div>
