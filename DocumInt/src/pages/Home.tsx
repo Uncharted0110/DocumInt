@@ -6,7 +6,7 @@ import { BackgroundLayout } from '../components/background';
 import { listProjects, loadProject, deleteProject } from '../utils/projectStorage';
 import type { ProjectMetadata } from '../utils/projectStorage';
 
-const App = () => {
+const Home = () => {
   const navigate = useNavigate();
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
@@ -103,4 +103,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default Home;
