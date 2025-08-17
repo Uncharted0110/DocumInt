@@ -108,7 +108,8 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       enableRedaction: false,
       defaultViewMode: "FIT_WIDTH", 
       showDisabledSaveButton: false,
-      exitPDFViewerType: "CLOSE"
+      exitPDFViewerType: "CLOSE",
+      enableSearchAPIs: true
     } as const;
 
     setView(adobeDCView);
@@ -179,7 +180,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   }, [pdfFile]);
 
   return (
-    <div className="flex-1 overflow-hidden">
+    <div className="flex-1 h-full overflow-hidden">
       {pdfFile ? (
         <div className="w-full h-full relative">
           <div
@@ -187,11 +188,11 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
             ref={pdfViewerRef}
             className="w-full h-full"
             style={{
-              height: 'calc(100vh)',
-              minHeight: '600px',
+              height: '100%',
+              minHeight: '400px',
               borderRadius: '16px',
               boxShadow: '0 4px 24px 0 rgba(0,0,0,0.08)',
-              overflow: 'hidden',
+              overflow: 'auto',
               display: 'flex',
               alignItems: 'stretch'
             }}

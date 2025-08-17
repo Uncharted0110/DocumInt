@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MessageCircle, X } from 'lucide-react';
+import { Cable, X } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -169,14 +169,14 @@ const Chat: React.FC<ChatProps> = ({
         className="fixed bottom-4 right-4 z-[2147483647] w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition-colors"
         title={isOpen ? "Close chat" : "Open chat"}
       >
-        {isOpen ? <X size={24}/> : <MessageCircle size={28}/>}
+        {isOpen ? <X size={24}/> : <Cable size={28}/>}
       </button>
 
       {/* Chat Panel */}
       {isOpen && (
   <div className="fixed bottom-24 right-4 z-[2147483647] bg-white rounded-lg shadow-2xl border border-gray-200 w-96 h-[560px] flex flex-col">
           <div className="flex items-center justify-between p-3 border-b border-gray-200">
-            <div className="font-semibold text-gray-700">Chat Assistant</div>
+            <div className="font-semibold text-gray-700">Connecting the Dots</div>
             <button onClick={toggleChat} className="text-gray-500 hover:text-gray-700">
               <X size={18}/>
             </button>
@@ -220,29 +220,6 @@ const Chat: React.FC<ChatProps> = ({
                 </div>
               </div>
             ))}
-          </div>
-          
-          {/* Chat Input */}
-          <div className="p-3 border-t border-gray-200 space-y-2">
-            {isProcessing && (
-              <div className="text-xs text-blue-600 mb-2 flex items-center gap-2"><span className="animate-pulse">{processingStatus || 'Processing PDFs...'}</span></div>
-            )}
-            <input 
-              value={chatMessage} 
-              onChange={e=>onMessageChange(e.target.value)} 
-              onKeyDown={e=>e.key==='Enter' && handleSendMessage()} 
-              placeholder={!pdfFiles.length? 'Upload PDFs first...' : 'Ask a question...'} 
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
-              disabled={!pdfFiles.length || isProcessing}
-            />
-            <button 
-              onClick={handleSendMessage} 
-              disabled={!pdfFiles.length || !chatMessage.trim() || isProcessing} 
-              className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center text-sm transition-colors"
-            >
-              <Send size={16} className="mr-1"/>
-              Send
-            </button>
           </div>
         </div>
       )}

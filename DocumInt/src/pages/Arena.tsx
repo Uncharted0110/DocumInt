@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-    ChevronLeft, ChevronRight, BrainCircuit, Move
+    ChevronLeft, ChevronRight, Move
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PDFViewer from '../components/PDFViewer';
@@ -649,15 +649,12 @@ const Arena = () => {
                                 )}
 
                                 <DRP id="viewer" title="Viewer" editable={isFreeLayout} state={p.viewer} setState={(s)=>setPanels(prev=>prev?{...prev,viewer:s}:prev)} boundsRef={canvasRef} minW={520} minH={360} highlight={highlightKey==='viewer'}>
-                                    <div className={`relative w-full h-full glass-panel rounded-3xl overflow-hidden gradient-ring ${highlightKey==='viewer' ? 'focus-flash' : ''}`}>
+                                    <div className={`relative w-full h-full glass-panel rounded-3xl gradient-ring ${highlightKey==='viewer' ? 'focus-flash' : ''}`}>
                                         {!isOutlineVisible && (
                                             <button onClick={handleShowOutline} className="absolute top-1/2 -translate-y-1/2 -left-8 z-20 p-2 rounded-full text-white btn-neo hover-lift" title="Show outline">
                                                 <ChevronRight size={20} />
                                             </button>
                                         )}
-                                        <button onClick={() => setIsMindmapVisible(true)} className="absolute top-4 -right-90 z-30 p-2 rounded-full text-white btn-neo hover-lift" title="Open Mindmap">
-                                            <BrainCircuit size={20} className="text-white" />
-                                        </button>
                                         <PDFViewer pdfFile={selectedPdf} pdfUrl={pdfUrl} pdfFileName={pdfFileName} isAdobeLoaded={isAdobeLoaded} onFileUpload={handleAddPdf} navigationPage={navigationPage} />
                                     </div>
                                 </DRP>
