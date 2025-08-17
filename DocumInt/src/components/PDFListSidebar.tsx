@@ -26,8 +26,7 @@ const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
 }) => {
   return (
     <div
-      className={`bg-gray-800 text-white h-screen flex flex-col transition-all duration-300 ease-in-out ${isMinimized ? 'w-16' : 'w-64'
-        }`}
+      className={`text-white flex flex-col transition-all duration-300 ease-in-out ${isMinimized ? 'w-16' : 'w-64'} h-full w-full bg-transparent`}
     >
       {/* Header - Fixed */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
@@ -83,7 +82,7 @@ const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
       )}
       
       {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+  <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {files.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 p-4">
             <FileText size={32} className="mb-2" />

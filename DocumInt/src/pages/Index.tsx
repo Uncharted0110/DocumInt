@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ScrollLayer from '../components/ScrollLayer';
 import BackgroundLayout from '../components/background/BackgroundLayout';
@@ -122,9 +122,9 @@ const Index = () => {
         {showNewProjectForm && (
           <NewProjectForm
             onClose={() => setShowNewProjectForm(false)}
-            onSubmit={(name, files, persona, task) => {
+            onSubmit={(name, files) => {
               setShowNewProjectForm(false);
-              navigate('/arena', { state: { projectName: name, files, persona, task } });
+              navigate('/arena', { state: { projectName: name, files } });
             }}
           />
         )}

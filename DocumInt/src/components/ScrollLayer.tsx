@@ -1,23 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import NewProjectForm from "./NewProjectForm";
 import { cn } from '../lib/utils';
-
-interface ScrollLayerProps {
-  children: React.ReactNode;
-  layerIndex: number;
-  className?: string;
-  floatingButtonPositionClass?: string;
-  floatingButtonCenterY?: boolean;
-}
 
 export default function ScrollLayer(props: any) {
   const layerRef = useRef<HTMLDivElement>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [isActive, setIsActive] = useState(props.layerIndex === 0);
+  const [, setIsActive] = useState(props.layerIndex === 0);
   const navigate = useNavigate();
-  const [showNewProjectForm, setShowNewProjectForm] = React.useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -123,20 +113,6 @@ export default function ScrollLayer(props: any) {
                 </div>
               </div>
             ),
-            document.body
-          )
-        }
-
-        {/* Modal on top; hide the floating button while open */}
-        {props.layerIndex === 2 && showNewProjectForm && typeof document !== "undefined" &&
-          createPortal(
-            <NewProjectForm
-              onClose={() => setShowNewProjectForm(false)}
-              onSubmit={(name, files, persona, task) => {
-                setShowNewProjectForm(false);
-                navigate("/arena", { state: { projectName: name, files, persona, task } });
-              }}
-            />,
             document.body
           )
         }
