@@ -3,14 +3,12 @@ import { FileText, Upload, X } from 'lucide-react';
 
 interface NewProjectFormProps {
   onClose: () => void;
-  onSubmit: (name: string, files: File[], persona?: string, task?: string) => void;
+  onSubmit: (name: string, files: File[]) => void;
 }
 
 const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) => {
   const [projectName, setProjectName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [persona, setPersona] = useState('');
-  const [task, setTask] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -19,8 +17,8 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
     }
   };
 
-  const removeFile = (index: number) => {
-    setSelectedFiles(selectedFiles.filter((_, i) => i !== index));
+  const removeFile = (fileName: string) => {
+    setSelectedFiles(selectedFiles.filter((f) => f.name !== fileName));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -50,7 +48,7 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
       }
 
       // Call the original onSubmit callback
-      onSubmit(projectName, selectedFiles, persona, task);
+      onSubmit(projectName, selectedFiles);
     }
   };
 
@@ -82,49 +80,20 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
           </div>
 
           <div className="mb-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="persona" className="block text-sm font-medium text-gray-700 mb-2">
-                  Persona
-                </label>
-                <input
-                  id="persona"
-                  type="text"
-                  value={persona}
-                  onChange={(e) => setPersona(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Student, Researcher"
-                />
-              </div>
-              <div>
-                <label htmlFor="task" className="block text-sm font-medium text-gray-700 mb-2">
-                  Task
-                </label>
-                <input
-                  id="task"
-                  type="text"
-                  value={task}
-                  onChange={(e) => setTask(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Research, Analysis"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="uploadFiles" className="block text-sm font-medium text-gray-700 mb-2">
               Upload PDFs
             </label>
-            <div
+            <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
+              className="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <Upload className="mx-auto h-12 w-12 text-gray-400" />
               <p className="mt-2 text-sm text-gray-600">Click to upload PDFs</p>
               <p className="text-xs text-gray-500">Supports multiple PDF files</p>
-            </div>
+            </button>
             <input
+              id="uploadFiles"
               type="file"
               ref={fileInputRef}
               className="hidden"
@@ -140,8 +109,8 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
                 Selected Files ({selectedFiles.length}):
               </h3>
               <div className="space-y-2 max-h-40 overflow-y-auto">
-                {selectedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded transition-colors hover:bg-gray-100">
+                {selectedFiles.map((file) => (
+                  <div key={file.name + file.size} className="flex items-center justify-between bg-gray-50 p-2 rounded transition-colors hover:bg-gray-100">
                     <div className="flex items-center min-w-0 flex-1">
                       <FileText size={20} className="text-gray-500 mr-2 flex-shrink-0" />
                       <div className="min-w-0 flex-1">
@@ -155,7 +124,7 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
                     </div>
                     <button
                       type="button"
-                      onClick={() => removeFile(index)}
+                      onClick={() => removeFile(file.name)}
                       className="text-gray-400 hover:text-red-500 flex-shrink-0 ml-2 p-1 rounded hover:bg-gray-200 transition-colors"
                       title="Remove file"
                     >

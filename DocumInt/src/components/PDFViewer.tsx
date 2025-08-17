@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Upload, AlertCircle, File } from 'lucide-react';
 import { useAdobePDFNavigation } from '../hooks/useAdobePDFNavigation';
-import { extractAndAnalyzePDF } from '../hooks/geminiService'
 
 interface PDFViewerProps {
   pdfFile: File | null;

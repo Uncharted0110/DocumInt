@@ -9,6 +9,7 @@ import PDFListSidebar from '../components/PDFListSidebar';
 import PDFOutlineSidebar from '../components/PDFOutlineSidebar';
 import MindMap from '../components/Mindmap';
 import Insights from '../components/Insights';
+import SelectionBulb from '../components/SelectionBulb';
 import { saveProjectState } from '../utils/projectStorage';
 
 // Extend window type to include AdobeDC
@@ -33,7 +34,6 @@ const Arena = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // UI state
-    const [activeTab, setActiveTab] = useState('quick');
     const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
     const [isOutlineVisible, setIsOutlineVisible] = useState(true);
     const [isMindmapVisible, setIsMindmapVisible] = useState(false);
@@ -46,10 +46,10 @@ const Arena = () => {
     const [isAdobeLoaded, setIsAdobeLoaded] = useState(false);
     const [navigationPage, setNavigationPage] = useState<number | undefined>(undefined);
 
-    // Chat state
+    // Chat state - simplified interface
     const [chatMessage, setChatMessage] = useState('');
-    const [chatHistory, setChatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; timestamp: Date; persona?: string; task?: string; results?: any[] }[]>([
-        { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them with persona-based search!', timestamp: new Date() }
+    const [chatHistory, setChatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; timestamp: Date; results?: any[] }[]>([
+        { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them!', timestamp: new Date() }
     ]);
 
     // Loading state
@@ -192,7 +192,7 @@ const Arena = () => {
     useEffect(() => {
         const timeout = setTimeout(() => {
             if (projectName) {
-                saveProjectState(projectName, { pdfFiles: pdfList, persona: undefined, task: undefined, chatHistory: chatHistory.map(m => ({ ...m, timestamp: m.timestamp })) as any });
+                saveProjectState(projectName, { pdfFiles: pdfList, chatHistory: chatHistory.map(m => ({ ...m, timestamp: m.timestamp })) as any });
             }
         }, 500);
         return () => clearTimeout(timeout);
@@ -207,9 +207,12 @@ const Arena = () => {
         setNavigationPage(undefined); // Reset navigation when switching PDFs
     };
 
-    const handlePageNavigation = (page: number) => {
-        console.log(`Arena: Received navigation request for page ${page}`);
+    const handlePageNavigation = (page: number, searchText?: string) => {
+        const baseMessage = `Arena: Received navigation request for page ${page}`;
+        const fullMessage = searchText ? `${baseMessage} with search: ${searchText}` : baseMessage;
+        console.log(fullMessage);
         setNavigationPage(page);
+        // Text highlighting will be implemented in future updates
     };
 
     // Add PDF handler
@@ -389,36 +392,44 @@ const Arena = () => {
                         {/* Chat Panel */}
                         <div className={`lg:static lg:w-96 lg:z-auto lg:translate-x-0 flex flex-col`}>
                             <div className="p-3 pb-2 border-b border-gray-200 bg-gray-50">
-                                <Insights projectName={projectName} />
-                            </div>
-                            <div className="min-h-0 flex-1">
-                                <Chat
-                                    chatHistory={chatHistory}
-                                    chatMessage={chatMessage}
-                                    activeTab={activeTab}
-                                    pdfFiles={pdfList} // changed from original 'files' to dynamic pdfList
-                                    projectName={projectName} // added to ensure backend receives project scoping
-                                    onMessageChange={setChatMessage}
-                                    onSendMessage={(message, persona, task, results) => {
-                                        if (message.trim()) {
-                                            const newMessage = {
-                                                id: crypto.randomUUID(),
-                                                type: 'user' as const,
-                                                message,
-                                                timestamp: new Date(),
-                                                persona,
-                                                task,
-                                                results
-                                            };
-                                            setChatHistory(prev => [...prev, newMessage]);
-                                            setChatMessage('');
-                                        }
-                                    }}
-                                    onTabChange={setActiveTab}
+                                <Insights 
+                                    projectName={projectName} 
                                     onNavigateToPage={handlePageNavigation}
                                 />
                             </div>
                         </div>
+
+                        {/* Selection Bulb Component */}
+                        <SelectionBulb 
+                            apis={window.AdobeDC} 
+                            onGenerateInsight={(selectedText: string) => {
+                                // This will be called by SelectionBulb to generate insights
+                                console.log('Generating insight for:', selectedText);
+                            }}
+                        />
+
+                        {/* Chat FAB */}
+                        <Chat
+                            chatHistory={chatHistory}
+                            chatMessage={chatMessage}
+                            pdfFiles={pdfList}
+                            projectName={projectName}
+                            onMessageChange={setChatMessage}
+                            onSendMessage={(message: string, results?: any[]) => {
+                                if (message.trim()) {
+                                    const newMessage = {
+                                        id: crypto.randomUUID(),
+                                        type: 'user' as const,
+                                        message,
+                                        timestamp: new Date(),
+                                        results
+                                    };
+                                    setChatHistory(prev => [...prev, newMessage]);
+                                    setChatMessage('');
+                                }
+                            }}
+                            onNavigateToPage={handlePageNavigation}
+                        />
                     </div>
 
                     {/* Mindmap Overlay */}

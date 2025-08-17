@@ -276,7 +276,7 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
 
     // Node interactions (dblclick, etc)
     allNodes
-      .on("dblclick", (event: any, d: any) => {
+      .on("dblclick", (_event: any, d: any) => {
         const updated = prompt("Edit node label:", d.data.label);
         if (!updated) return;
         updateNodeLabel(d.data.id, updated);

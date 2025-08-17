@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from io import BytesIO
 import html
 import tempfile
@@ -42,10 +42,23 @@ app.add_middleware(
 
 # Constant for missing heading label
 NO_HEADING = 'No heading'
+NO_CONTENT = 'No content'
 
 # Global cache for PDF embeddings and indices
 pdf_cache: Dict[str, Any] = {}
 executor = ThreadPoolExecutor(max_workers=4)
+
+# Persistence directories
+BASE_DATA_DIR = Path(os.environ.get("DOCUMINT_DATA_DIR", "./data/projects")).resolve()
+BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+# New insight path helpers
+INSIGHTS_FOLDER_NAME = "insights"
+
+def _insights_dir(project_name: str) -> Path:
+    return _project_path(project_name) / INSIGHTS_FOLDER_NAME
+
+def _insight_dir(project_name: str, insight_id: str) -> Path:
+    return _insights_dir(project_name) / insight_id
 
 # Persistence directories
 BASE_DATA_DIR = Path(os.environ.get("DOCUMINT_DATA_DIR", "./data/projects")).resolve()
@@ -340,7 +353,7 @@ def process_pdfs_background(cache_key: str, pdf_files: List[str], temp_dir: Opti
 @app.post("/query-pdfs")
 async def query_pdfs(
     cache_key: str = Form(...),
-    persona: str = Form(...),
+    persona: str = Form(default="General User"),
     task: str = Form(...),
     k: int = Form(default=5)
 ):
@@ -380,7 +393,7 @@ async def query_pdfs(
                 result = {
                     "document": chunk.get('pdf_name', 'Unknown'),
                     "section_title": chunk.get('heading', NO_HEADING),
-                    "refined_text": chunk.get('content', chunk.get('text', 'No content')),
+                    "refined_text": chunk.get('content', chunk.get('text', NO_CONTENT)),
                     "page_number": chunk.get('page_number', 1),
                     "importance_rank": chunk.get('hybrid_score', 0),
                     "bm25_score": chunk.get('bm25_score', 0),
@@ -566,8 +579,45 @@ Document Section:
                 continue
         
         print(f"✅ Gemini analysis complete. Processed {len(gemini_results)} chunks")
-        
-        # Return comprehensive results
+        # Persist analysis with insight_id
+        insight_id = uuid.uuid4().hex
+        project_name = cached_data.get("project_name", "project")
+        insight_dir = _insight_dir(project_name, insight_id)
+        try:
+            insight_dir.mkdir(parents=True, exist_ok=True)
+            import aiofiles
+            async with aiofiles.open(insight_dir/"analysis.json", "w", encoding="utf-8") as f:
+                await f.write(json.dumps({
+                    "metadata": {
+                        "input_documents": cached_data["pdf_files"],
+                        "persona": persona,
+                        "job_to_be_done": task,
+                        "domain": cached_data["domain"],
+                        "total_chunks_found": len(top_chunks),
+                        "chunks_analyzed": len(chunks_to_analyze),
+                        "gemini_model": gemini_model,
+                        "project_name": project_name
+                    },
+                    "retrieval_results": [
+                        {
+                            "document": chunk.get('pdf_name', 'Unknown'),
+                            "section_title": chunk.get('heading', NO_HEADING),
+                            "content": chunk.get('content', chunk.get('text', NO_CONTENT)),
+                            "page_number": chunk.get('page_number', 1),
+                            "hybrid_score": chunk.get('hybrid_score', 0),
+                            "bm25_score": chunk.get('bm25_score', 0),
+                            "embedding_score": chunk.get('embedding_score', 0)
+                        }
+                        for chunk in top_chunks
+                    ],
+                    "gemini_analysis": gemini_results,
+                    "summary": {
+                        "top_insights": [result["gemini_analysis"][:200] + "..." if len(result["gemini_analysis"]) > 200 else result["gemini_analysis"] for result in gemini_results if not result.get("error", False)]
+                    },
+                    "insight_id": insight_id
+                }, indent=2))
+        except Exception as persist_err:
+            print(f"⚠️ Failed to persist insight {insight_id}: {persist_err}")
         return {
             "metadata": {
                 "input_documents": cached_data["pdf_files"],
@@ -576,7 +626,8 @@ Document Section:
                 "domain": cached_data["domain"],
                 "total_chunks_found": len(top_chunks),
                 "chunks_analyzed": len(chunks_to_analyze),
-                "gemini_model": gemini_model
+                "gemini_model": gemini_model,
+                "project_name": project_name
             },
             "retrieval_results": [
                 {
@@ -593,9 +644,9 @@ Document Section:
             "gemini_analysis": gemini_results,
             "summary": {
                 "top_insights": [result["gemini_analysis"][:200] + "..." if len(result["gemini_analysis"]) > 200 else result["gemini_analysis"] for result in gemini_results if not result.get("error", False)]
-            }
+            },
+            "insight_id": insight_id
         }
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -761,7 +812,7 @@ class TTSRequest(BaseModel):
 def _build_ssml(text: str, voice: str, rate: float, pitch: str, lang: str) -> str:
     safe = html.escape(text or "")
     # Convert rate multiplier to percentage (1.0 = 100% normal speed)
-    rate_pct = rate * 100
+    rate_pct = rate
     return f"""<speak version="1.0" xml:lang="{lang}">
   <voice name="{voice}">
     <prosody rate="{rate_pct:.0f}%" pitch="{pitch}">{safe}</prosody>
@@ -830,6 +881,129 @@ async def tts(req: TTSRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
+
+# --- Podcast generation unified endpoint ---
+class GeneratePodcastRequest(BaseModel):
+    project_name: str
+    insight_id: str
+    regenerate: Optional[bool] = False
+    voice: Optional[str] = "en-US-AvaMultilingualNeural"
+    audio_format: Optional[str] = "mp3"
+
+@app.post("/generate-podcast")
+async def generate_podcast(req: GeneratePodcastRequest):
+    project = _safe_project_name(req.project_name)
+    insight_dir = _insight_dir(project, req.insight_id)
+    analysis_path = insight_dir/"analysis.json"
+    if not analysis_path.exists():
+        raise HTTPException(status_code=404, detail="Insight analysis not found")
+    audio_path = insight_dir/"podcast.mp3"
+    script_path = insight_dir/"script.txt"
+
+    # Load analysis
+    try:
+        import aiofiles
+        async with aiofiles.open(analysis_path, 'r', encoding='utf-8') as f:
+            raw = await f.read()
+        analysis = json.loads(raw)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load analysis: {e}")
+
+    # If existing audio and not regenerating, return
+    if audio_path.exists() and script_path.exists() and not req.regenerate:
+        import aiofiles
+        async with aiofiles.open(script_path,'r',encoding='utf-8') as sf:
+            script_cached = await sf.read()
+        return {"insight_id": req.insight_id, "audio_url": f"/insight-audio/{project}/{req.insight_id}.mp3", "script": script_cached, "cached": True}
+
+    # Build script (reuse podcastify logic inline)
+    try:
+        retrieval = (analysis.get("retrieval_results") or [])[:5]
+        analyses = [a for a in (analysis.get("gemini_analysis") or []) if not a.get("error")] [:3]
+        insights = ((analysis.get("summary") or {}).get("top_insights") or [])[:6]
+        meta = analysis.get("metadata") or {}
+        persona = meta.get("persona", "Unknown Persona")
+        job = meta.get("job_to_be_done", "Unknown Task")
+        domain = meta.get("domain", "general")
+        hosts = [HOST_A, HOST_B]
+        prompt = f"""
+You are a scriptwriter creating a short podcast conversation.
+Constraints:
+- Style: engaging, educational, conversational
+- Audience: general technical audience
+- Duration: 3-5 minutes
+- Speakers: {hosts[0]} and {hosts[1]}
+- Avoid hallucinations. Use only provided material. Cite document and section casually when relevant.
+Context:
+- Persona: {persona}
+- Job to be done: {job}
+- Domain: {domain}
+Top Insights:
+{chr(10).join(f"- {i}" for i in insights) if insights else "- (none)"}
+Key Retrieval Results (document • section • page):
+{chr(10).join(f"- {r.get('document','Unknown')} • {r.get('section_title','No section')} • p.{r.get('page_number',1)}" for r in retrieval) if retrieval else "- (none)"}
+Analysis Excerpts:
+{chr(10).join(f"- {a.get('document','Unknown')} • {a.get('section_title','No section')} (p.{a.get('page_number',1)}): {(a.get('gemini_analysis') or '')[:600]}" for a in analyses) if analyses else "- (none)"}
+Task:
+Write a podcast script with:
+1) A concise intro hook (1–2 lines).
+2) A back-and-forth discussion that explains the most important insights clearly, using natural conversational turns.
+3) Occasional references to documents/sections.
+4) A brief wrap-up with next steps.
+Output format (plain text):
+Title: <compelling title>
+{hosts[0]}: <line>
+{hosts[1]}: <line>
+... (alternate clearly)
+"""
+        script = await call_gemini_api(
+            prompt=prompt,
+            api_key=os.getenv("VITE_GEMINI_API_KEY"),
+            model=GEMINI_DEFAULT_MODEL
+        )
+        script_path.write_text(script, encoding='utf-8')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {e}")
+
+    # TTS synthesis (best-effort). If fails, still return script.
+    try:
+        import azure.cognitiveservices.speech as speechsdk  # type: ignore
+        speech_key = os.getenv("SPEECH_API_KEY")
+        speech_region = os.getenv("SPEECH_REGION") or os.getenv("AZURE_SPEECH_REGION")
+        if not speech_key or not speech_region:
+            raise RuntimeError("Missing Azure Speech credentials")
+        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+        speech_config.set_speech_synthesis_output_format(
+            speechsdk.SpeechSynthesisOutputFormat.Audio48Khz192KBitRateMonoMp3
+        )
+        ssml = _build_ssml(script[:10000], req.voice or "en-US-AvaMultilingualNeural", 1.0, "0%", "en-US")
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: synthesizer.speak_ssml_async(ssml).get())
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+            audio_bytes = bytes(result.audio_data or b"")
+            insight_dir.mkdir(parents=True, exist_ok=True)
+            audio_path.write_bytes(audio_bytes)
+        else:
+            print("⚠️ Azure TTS did not complete, reason:", result.reason)
+    except Exception as e:
+        print(f"⚠️ TTS failed for insight {req.insight_id}: {e}")
+
+    return {
+        "insight_id": req.insight_id,
+        "audio_url": f"/insight-audio/{project}/{req.insight_id}.mp3" if audio_path.exists() else None,
+        "script": script_path.read_text(encoding='utf-8'),
+        "cached": False,
+        "regenerated": req.regenerate
+    }
+
+@app.get("/insight-audio/{project_name}/{insight_id}.mp3")
+async def get_insight_audio(project_name: str, insight_id: str):
+    project = _safe_project_name(project_name)
+    audio_path = _insight_dir(project, insight_id)/"podcast.mp3"
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Audio not found")
+    return FileResponse(audio_path, media_type="audio/mpeg")
 
 if __name__ == "__main__":
     import uvicorn
