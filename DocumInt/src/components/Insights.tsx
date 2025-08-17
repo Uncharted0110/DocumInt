@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Lightbulb, Loader2, Sparkles } from 'lucide-react';
 import FlippableCards, { type FlippableCardItem } from './FlippableCards';
-import { updateProjectInsights, loadProject, type ProjectInsightPersist } from '../utils/projectStorage';
+import { updateProjectInsights, type ProjectInsightPersist } from '../utils/projectStorage';
 import { useMindmap } from '../contexts/MindmapContext';
+import ReactMarkdown from 'react-markdown';
 
 interface GeminiAnalysisResp { metadata?: any; retrieval_results?: any[]; gemini_analysis?: any[]; summary?: { top_insights?: string[] }; selected_text?: string; insight_id?: string; }
 interface InsightsProps {
@@ -17,31 +18,87 @@ const palette = ['bg-indigo-50 border-indigo-200','bg-emerald-50 border-emerald-
 const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNavigateToSource, onOpenMindmap }) => {
   const [items, setItems] = useState<FlippableCardItem[]>([]);
   const [analysisById, setAnalysisById] = useState<Record<string, GeminiAnalysisResp>>({});
-  const [podcastStatus, setPodcastStatus] = useState<Record<string, { state: 'idle'|'loading'|'ready'|'error'; audioUrl?: string }>>({});
+  const [podcastStatus, setPodcastStatus] = useState<Record<string, { state: 'idle'|'loading'|'ready'|'error'; audioUrl?: string; transcript?: string }>>({});
   const counterRef = useRef(0);
   const { updateMindmap } = useMindmap();
 
-  // Load persisted insights (basic)
+  // Load persisted insights from server
   useEffect(() => {
     (async () => {
       if (!projectName) return;
-      const loaded = await loadProject(projectName);
-      if (!loaded?.insights) return;
-      const restored: FlippableCardItem[] = loaded.insights.map((p,i) => ({
-        id: p.id,
-        frontTitle: p.task.slice(0,60)+(p.task.length>60?'…':''),
-        accentColor: p.accentColor || palette[i % palette.length],
-        frontExpandedContent: <div className="text-sm text-gray-600">(Persisted insight – open new selection to analyze)</div>,
-        backContent: <div className="text-xs text-gray-500">Flip to generate podcast.</div>,
-        backExpandedContent: <div className="text-sm text-gray-500">Flip to generate podcast.</div>
-      }));
-      counterRef.current = restored.length;
-      setItems(restored);
-      const analyses: Record<string, any> = {};
-      loaded.insights.forEach(p => { if (p.analysis) analyses[p.id] = p.analysis; });
-      setAnalysisById(analyses);
+      try {
+        const response = await fetch(`http://localhost:8000/projects/${projectName}/insights`);
+        if (!response.ok) {
+          console.warn('Failed to load insights from server');
+          return;
+        }
+        
+        const data = await response.json();
+        const serverInsights = data.insights || [];
+        
+        if (serverInsights.length > 0) {
+          const restored: FlippableCardItem[] = serverInsights.map((insight: any, i: number) => ({
+            id: insight.insight_id,
+            frontTitle: (insight.metadata?.job_to_be_done || 'Insight').slice(0,60) + ((insight.metadata?.job_to_be_done?.length || 0) > 60 ? '…' : ''),
+            accentColor: palette[i % palette.length],
+            frontExpandedContent: <div className="text-sm text-gray-600">Loading insight...</div>,
+            backContent: insight.has_audio ? 
+              audioEl(`http://localhost:8000/insight-audio/${projectName}/${insight.insight_id}.mp3`, insight.script) :
+              <div className="text-xs text-gray-500">Flip to generate podcast.</div>,
+            backExpandedContent: insight.has_audio ?
+              audioEl(`http://localhost:8000/insight-audio/${projectName}/${insight.insight_id}.mp3`, insight.script) :
+              <div className="text-sm text-gray-500">Flip to generate podcast.</div>
+          }));
+          
+          counterRef.current = restored.length;
+          setItems(restored);
+          
+          // Load full analysis data for each insight
+          const analyses: Record<string, any> = {};
+          const podcastStatuses: Record<string, any> = {};
+          
+          for (const insight of serverInsights) {
+            try {
+              const analysisResponse = await fetch(`http://localhost:8000/projects/${projectName}/insights/${insight.insight_id}`);
+              if (analysisResponse.ok) {
+                const fullAnalysis = await analysisResponse.json();
+                analyses[insight.insight_id] = fullAnalysis;
+                
+                if (insight.has_audio) {
+                  podcastStatuses[insight.insight_id] = {
+                    state: 'ready',
+                    audioUrl: fullAnalysis.audio_url,
+                    transcript: fullAnalysis.script
+                  };
+                } else {
+                  podcastStatuses[insight.insight_id] = { state: 'idle' };
+                }
+              }
+            } catch (e) {
+              console.warn(`Failed to load analysis for insight ${insight.insight_id}:`, e);
+            }
+          }
+          
+          setAnalysisById(analyses);
+          setPodcastStatus(podcastStatuses);
+          
+          // Update front expanded content now that we have analysis data
+          setItems(prev => prev.map(item => {
+            const analysis = analyses[item.id];
+            if (analysis) {
+              return {
+                ...item,
+                frontExpandedContent: buildFrontExpanded(analysis.metadata?.job_to_be_done || 'Selected text', analysis)
+              };
+            }
+            return item;
+          }));
+        }
+      } catch (error) {
+        console.warn('Error loading persisted insights:', error);
+      }
     })();
-  }, [projectName]);
+  }, [projectName]); // Remove buildFrontExpanded dependency to avoid circular reference
 
   // Persist
   useEffect(() => {
@@ -145,7 +202,7 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
     };
     window.addEventListener('documint:newInsightAnalysis', handler as EventListener);
     return () => window.removeEventListener('documint:newInsightAnalysis', handler as EventListener);
-  }, [buildFrontExpanded]);
+  }, []); // Remove buildFrontExpanded dependency to avoid circular reference
 
   const genPodcast = async (id: string) => {
     const analysis = analysisById[id];
@@ -157,8 +214,9 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
       if (!resp.ok) throw new Error(await resp.text());
       const data = await resp.json();
       const audioUrl = `http://localhost:8000${data.audio_url}`;
-      setItems(prev => prev.map(it => it.id===id ? { ...it, backContent: audioEl(audioUrl), backExpandedContent: audioEl(audioUrl) } : it));
-      setPodcastStatus(p => ({ ...p, [id]: { state: 'ready', audioUrl } }));
+      const transcript = data.script || '';
+      setItems(prev => prev.map(it => it.id===id ? { ...it, backContent: audioEl(audioUrl, transcript), backExpandedContent: audioEl(audioUrl, transcript) } : it));
+      setPodcastStatus(p => ({ ...p, [id]: { state: 'ready', audioUrl, transcript } }));
     } catch (e) {
       console.debug('Podcast generation failed', e);
       setItems(prev => prev.map(it => it.id===id ? { ...it, backContent: <div className="text-xs text-red-600">Podcast failed.</div>, backExpandedContent: <div className="text-sm text-red-600">Podcast failed.</div> } : it));
@@ -170,10 +228,32 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
     if (flipped) genPodcast(id);
   };
 
-  const audioEl = (src: string) => (
+  const handleDelete = (id: string) => {
+    setItems(prev => prev.filter(item => item.id !== id));
+    setAnalysisById(prev => {
+      const { [id]: deleted, ...rest } = prev;
+      return rest;
+    });
+    setPodcastStatus(prev => {
+      const { [id]: deleted, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const audioEl = (src: string, transcript?: string) => (
     <div className="w-full">
       <audio controls className="w-full" src={src}><track kind="captions"/></audio>
       <div className="mt-1 text-[11px] text-gray-500">Podcast ready</div>
+      {transcript && (
+        <div className="mt-3 p-3 bg-gray-50 rounded border">
+          <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
+            📝 Podcast Script
+          </div>
+          <div className="text-xs text-gray-700 leading-relaxed max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] bg-white p-2 rounded border">
+            {transcript}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -181,7 +261,7 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
     <div className="w-full">
       <div className="mb-2 flex items-center justify-between"><div className="font-semibold text-gray-700 flex items-center gap-2"><Lightbulb size={16}/> Insights</div><div className="text-xs text-gray-500">{items.length} total</div></div>
       {items.length===0 && <div className="p-4 border rounded bg-white text-xs text-gray-600">Select text and Generate Insight using the bulb.</div>}
-      <FlippableCards items={items} collapsedHeightClass="h-32" expandedHeightClass="h-[430px]" onFlip={handleFlip} />
+      <FlippableCards items={items} collapsedHeightClass="h-32" expandedHeightClass="h-[430px]" onFlip={handleFlip} onDelete={handleDelete} />
     </div>
   );
 };

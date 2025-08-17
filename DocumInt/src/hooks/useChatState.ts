@@ -56,6 +56,13 @@ export const useChatState = () => {
     });
   }, [addMessage]);
 
+  const addSelectedTextSearch = useCallback((selectedText: string) => {
+    addMessage({
+      type: 'bot',
+      message: `Selected text: "${selectedText}"\n\nSearching for relevant sources...`
+    });
+  }, [addMessage]);
+
   const clearChat = useCallback(() => {
     setChatHistory([
       {
@@ -71,6 +78,7 @@ export const useChatState = () => {
     chatHistory,
     addUserMessage,
     addBotMessage,
+    addSelectedTextSearch,
     clearChat
   };
 };

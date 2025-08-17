@@ -350,6 +350,62 @@ def process_pdfs_background(cache_key: str, pdf_files: List[str], temp_dir: Opti
             except Exception:
                 pass
 
+@app.post("/append-pdf")
+async def append_pdf(
+    project_name: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """Append a single new PDF to an existing project and rebuild embeddings.
+    Returns a new cache_key whose status can be polled at /cache-status/{cache_key}.
+    If the PDF hash already exists, it simply reuses existing cache (no rebuild)."""
+    try:
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        safe_name = _safe_project_name(project_name)
+        meta = load_project_meta(safe_name)
+        if not meta:
+            raise HTTPException(status_code=404, detail="Project not found")
+        existing_chunks = load_project_chunks(safe_name)
+        existing_hashes = {f.get("hash") for f in meta.get("files", [])}
+        content = await file.read()
+        file_hash = hash_bytes(content)
+        if file_hash in existing_hashes:
+            # No change; build retriever if missing and return reused status
+            cache_key = str(uuid.uuid4())
+            try:
+                retriever = build_hybrid_index(existing_chunks, domain=meta.get("domain","general"))
+            except Exception:
+                retriever = None
+            pdf_cache[cache_key] = {
+                "retriever": retriever,
+                "chunks": existing_chunks,
+                "domain": meta.get("domain","general"),
+                "pdf_files": [f.get("name") for f in meta.get("files", [])],
+                "project_name": safe_name,
+                "reused": True
+            }
+            return {"cache_key": cache_key, "message": "PDF already present; reused existing cache", "reused": True}
+        # Write temp file
+        temp_dir = tempfile.mkdtemp()
+        temp_path = os.path.join(temp_dir, file.filename)
+        async with aiofiles.open(temp_path, 'wb') as f:
+            await f.write(content)
+        cache_key = str(uuid.uuid4())
+        pdf_cache[cache_key] = {"processing": True, "project_name": safe_name, "chunks": existing_chunks, "pdf_files": [f.get("name") for f in meta.get("files", [])]}
+        new_files_meta = [{"name": file.filename, "hash": file_hash, "size": len(content)}]
+        def run_bg():
+            try:
+                process_pdfs_background(cache_key, [temp_path], temp_dir, safe_name, existing_chunks, meta, new_files_meta)
+            except Exception as e:
+                pdf_cache[cache_key] = {"error": f"Processing failed: {e}", "project_name": safe_name}
+        task = asyncio.create_task(asyncio.to_thread(run_bg))
+        pdf_cache[cache_key]["task"] = task
+        return {"cache_key": cache_key, "message": "Appending PDF and rebuilding embeddings", "reused": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error appending PDF: {e}")
+
 @app.post("/query-pdfs")
 async def query_pdfs(
     cache_key: str = Form(...),
@@ -470,123 +526,133 @@ async def analyze_chunks_with_gemini(
     task: str = Form(...),
     k: int = Form(default=5),
     gemini_api_key: str = os.getenv("VITE_GEMINI_API_KEY"),
-    analysis_prompt: str = Form(default="Analyze this document section and provide key insights, important facts, and connections to the user's task."),
-    max_chunks_to_analyze: int = Form(default=3),
+    analysis_prompt: str = Form(default="Analyze the combined document sections and provide: (1) Key Insights, (2) Actionable Recommendations, (3) 'Did you know?' concise interesting facts grounded ONLY in the provided text, (4) Potential Contradictions / Inconsistencies across the sections with source references (document + page), (5) Cross-connections relevant to the persona & task."),
+    max_chunks_to_analyze: int = Form(default=5),
     gemini_model: str = Form(default=GEMINI_DEFAULT_MODEL)
 ):
     """
-    Query cached PDFs, get top chunks, and analyze them with Gemini AI
+    Query cached PDFs, get top chunks, and analyze them with Gemini AI.
+    Modified: combine the top 5 (or fewer) chunks into a SINGLE Gemini API call instead of per-chunk calls.
     """
     try:
-        # First, get the top chunks using existing retrieval logic
         if cache_key not in pdf_cache:
             raise HTTPException(status_code=404, detail="Cache key not found. Please upload PDFs first.")
-        
+
         cached_data = pdf_cache[cache_key]
         retriever = cached_data["retriever"]
         chunks = cached_data["chunks"]
-        
+
         print(f"🔍 Querying with persona: {persona}, task: {task}")
         print(f"📊 Found {len(chunks)} chunks in cache")
-        
-        # Get top chunks using hybrid retrieval
+
         query = f"{persona} {task}"
         print(f"🔍 Searching with query: '{query}'")
-        
         try:
             top_chunks = search_top_k_hybrid(retriever, query, persona=persona, task=task, k=k)
             print(f"✅ Found {len(top_chunks)} top chunks")
         except Exception as search_error:
             print(f"❌ Search error: {str(search_error)}")
             raise HTTPException(status_code=500, detail=f"Search error: {str(search_error)}")
-        
-        # Prepare chunks for Gemini analysis
-        chunks_to_analyze = top_chunks[:max_chunks_to_analyze]
-        gemini_results = []
-        
-        print(f"🤖 Starting Gemini analysis of {len(chunks_to_analyze)} chunks...")
-        
-        # Process each chunk with Gemini
-        for i, chunk in enumerate(chunks_to_analyze):
-            try:
-                chunk_content = chunk.get('content', chunk.get('text', ''))
-                chunk_heading = chunk.get('heading', 'No heading')
-                pdf_name = chunk.get('pdf_name', 'Unknown')
-                
-                # Create context-aware prompt
-                contextual_prompt = f"""
-You are analyzing a document section for a user with the following context:
-- User Persona: {persona}
-- User Task: {task}
-- Document: {pdf_name}
-- Section: {chunk_heading}
 
-{analysis_prompt}
+        # Select up to 5 (or user-limited) chunks to aggregate
+        use_n = min(5, max_chunks_to_analyze, len(top_chunks))
+        combined = top_chunks[:use_n]
 
-Please provide insights that are specifically relevant to this user's persona and task.
-Document Section:
-{chunk_content}
+        if not combined:
+            return {
+                "metadata": {
+                    "input_documents": cached_data["pdf_files"],
+                    "persona": persona,
+                    "job_to_be_done": task,
+                    "domain": cached_data["domain"],
+                    "total_chunks_found": 0,
+                    "chunks_analyzed": 0,
+                    "gemini_model": gemini_model,
+                    "project_name": cached_data.get("project_name")
+                },
+                "retrieval_results": [],
+                "gemini_analysis": [],
+                "summary": {"top_insights": []},
+                "insight_id": uuid.uuid4().hex
+            }
+
+        # Build aggregated contextual prompt
+        sections_blob_parts = []
+        for idx, ch in enumerate(combined, start=1):
+            sections_blob_parts.append(
+                f"Section {idx}:\nDocument: {ch.get('pdf_name','Unknown')}\nHeading: {ch.get('heading', NO_HEADING)}\nPage: {ch.get('page_number',1)}\nContent:\n{ch.get('content', ch.get('text',''))}\n---"
+            )
+        sections_blob = "\n".join(sections_blob_parts)
+
+        contextual_prompt = f"""
+You are an expert analyst system.
+Persona: {persona}
+User Task: {task}
+Domain: {cached_data['domain']}
+
+You will analyze the following aggregated document sections (each clearly delimited). {analysis_prompt}
+
+STRICT INSTRUCTIONS:
+- Base EVERYTHING ONLY on provided sections. No external knowledge unless it is trivially common-sense.
+- When listing contradictions/inconsistencies, cite the involved Section numbers and their document + page.
+- "Did you know?" facts must be short (<=200 chars each), surprising/valuable, and directly grounded in the text.
+- Provide outputs in markdown format with the following labeled sections:
+  ## Key Insights
+  ## Actionable Recommendations
+  ## Did You Know?
+  ## Contradictions
+  ## Persona Alignment
+  ## Summary
+
+AGGREGATED SECTIONS START
+{sections_blob}
+AGGREGATED SECTIONS END
 """
-                
-                print(f"🔍 Analyzing chunk {i+1}/{len(chunks_to_analyze)} with Gemini...")
-                
-                # Call Gemini API
-                gemini_response = await call_gemini_api(
-                    prompt=contextual_prompt,
-                    api_key=os.getenv("VITE_GEMINI_API_KEY"),
-                    model=gemini_model
-                )
-                
-                gemini_result = {
-                    "chunk_index": i,
-                    "document": pdf_name,
-                    "section_title": chunk_heading,
-                    "page_number": chunk.get('page_number', 1),
-                    "original_content": chunk_content,
-                    "retrieval_scores": {
-                        "hybrid_score": chunk.get('hybrid_score', 0),
-                        "bm25_score": chunk.get('bm25_score', 0),
-                        "embedding_score": chunk.get('embedding_score', 0)
-                    },
-                    "gemini_analysis": gemini_response,
-                    "analysis_timestamp": asyncio.get_event_loop().time()
-                }
-                
-                gemini_results.append(gemini_result)
-                
-                # Add delay between API calls to respect rate limits
-                if i < len(chunks_to_analyze) - 1:
-                    await asyncio.sleep(1)  # 1 second delay between calls
-                    
-            except Exception as chunk_error:
-                print(f"❌ Error analyzing chunk {i+1}: {str(chunk_error)}")
-                # Add error result to maintain indexing
-                gemini_results.append({
-                    "chunk_index": i,
-                    "document": chunk.get('pdf_name', 'Unknown'),
-                    "section_title": chunk.get('heading', 'No heading'),
-                    "page_number": chunk.get('page_number', 1),
-                    "original_content": chunk.get('content', chunk.get('text', '')),
-                    "retrieval_scores": {
-                        "hybrid_score": chunk.get('hybrid_score', 0),
-                        "bm25_score": chunk.get('bm25_score', 0),
-                        "embedding_score": chunk.get('embedding_score', 0)
-                    },
-                    "gemini_analysis": f"Error analyzing this chunk: {str(chunk_error)}",
-                    "analysis_timestamp": asyncio.get_event_loop().time(),
-                    "error": True
-                })
-                continue
-        
-        print(f"✅ Gemini analysis complete. Processed {len(gemini_results)} chunks")
-        # Persist analysis with insight_id
+        print(f"🤖 Sending aggregated prompt with {use_n} sections to Gemini (single call)...")
+        gemini_text = await call_gemini_api(
+            prompt=contextual_prompt,
+            api_key=os.getenv("VITE_GEMINI_API_KEY"),
+            model=gemini_model
+        )
+
+        # Single result structure
         insight_id = uuid.uuid4().hex
+        gemini_results = [
+            {
+                "chunk_index": 0,
+                "combined": True,
+                "included_chunk_count": use_n,
+                "included_sections": [
+                    {
+                        "index": i,
+                        "document": ch.get('pdf_name','Unknown'),
+                        "section_title": ch.get('heading', NO_HEADING),
+                        "page_number": ch.get('page_number',1),
+                        "hybrid_score": ch.get('hybrid_score',0),
+                        "bm25_score": ch.get('bm25_score',0),
+                        "embedding_score": ch.get('embedding_score',0)
+                    } for i, ch in enumerate(combined)
+                ],
+                "gemini_analysis": gemini_text,
+                "analysis_timestamp": asyncio.get_event_loop().time()
+            }
+        ]
+
+        print(f"✅ Gemini analysis complete. Processed {use_n} chunks in single call")
+        # Persist analysis with insight_id
         project_name = cached_data.get("project_name", "project")
         insight_dir = _insight_dir(project_name, insight_id)
         try:
             insight_dir.mkdir(parents=True, exist_ok=True)
             import aiofiles
             async with aiofiles.open(insight_dir/"analysis.json", "w", encoding="utf-8") as f:
+                # Prepare summary top insights cleanly
+                summary_top_insights: list[str] = []
+                if isinstance(gemini_text, str):
+                    truncated = gemini_text[:400]
+                    if len(gemini_text) > 400:
+                        truncated += "..."
+                    summary_top_insights = [truncated]
                 await f.write(json.dumps({
                     "metadata": {
                         "input_documents": cached_data["pdf_files"],
@@ -594,30 +660,39 @@ Document Section:
                         "job_to_be_done": task,
                         "domain": cached_data["domain"],
                         "total_chunks_found": len(top_chunks),
-                        "chunks_analyzed": len(chunks_to_analyze),
+                        "chunks_analyzed": use_n,
                         "gemini_model": gemini_model,
                         "project_name": project_name
                     },
                     "retrieval_results": [
                         {
-                            "document": chunk.get('pdf_name', 'Unknown'),
-                            "section_title": chunk.get('heading', NO_HEADING),
-                            "content": chunk.get('content', chunk.get('text', NO_CONTENT)),
-                            "page_number": chunk.get('page_number', 1),
-                            "hybrid_score": chunk.get('hybrid_score', 0),
-                            "bm25_score": chunk.get('bm25_score', 0),
-                            "embedding_score": chunk.get('embedding_score', 0)
+                            "document": ch.get('pdf_name', 'Unknown'),
+                            "section_title": ch.get('heading', NO_HEADING),
+                            "content": ch.get('content', ch.get('text', NO_CONTENT)),
+                            "page_number": ch.get('page_number', 1),
+                            "hybrid_score": ch.get('hybrid_score', 0),
+                            "bm25_score": ch.get('bm25_score', 0),
+                            "embedding_score": ch.get('embedding_score', 0)
                         }
-                        for chunk in top_chunks
+                        for ch in top_chunks
                     ],
                     "gemini_analysis": gemini_results,
                     "summary": {
-                        "top_insights": [result["gemini_analysis"][:200] + "..." if len(result["gemini_analysis"]) > 200 else result["gemini_analysis"] for result in gemini_results if not result.get("error", False)]
+                        "top_insights": summary_top_insights
                     },
                     "insight_id": insight_id
                 }, indent=2))
         except Exception as persist_err:
             print(f"⚠️ Failed to persist insight {insight_id}: {persist_err}")
+
+        # Prepare response summary insights
+        response_top_insights: list[str] = []
+        if isinstance(gemini_text, str):
+            truncated_resp = gemini_text[:400]
+            if len(gemini_text) > 400:
+                truncated_resp += "..."
+            response_top_insights = [truncated_resp]
+
         return {
             "metadata": {
                 "input_documents": cached_data["pdf_files"],
@@ -625,28 +700,35 @@ Document Section:
                 "job_to_be_done": task,
                 "domain": cached_data["domain"],
                 "total_chunks_found": len(top_chunks),
-                "chunks_analyzed": len(chunks_to_analyze),
+                "chunks_analyzed": use_n,
                 "gemini_model": gemini_model,
                 "project_name": project_name
             },
             "retrieval_results": [
                 {
-                    "document": chunk.get('pdf_name', 'Unknown'),
-                    "section_title": chunk.get('heading', 'No heading'),
-                    "content": chunk.get('content', chunk.get('text', 'No content')),
-                    "page_number": chunk.get('page_number', 1),
-                    "hybrid_score": chunk.get('hybrid_score', 0),
-                    "bm25_score": chunk.get('bm25_score', 0),
-                    "embedding_score": chunk.get('embedding_score', 0)
+                    "document": ch.get('pdf_name', 'Unknown'),
+                    "section_title": ch.get('heading', NO_HEADING),
+                    "content": ch.get('content', ch.get('text', NO_CONTENT)),
+                    "page_number": ch.get('page_number', 1),
+                    "hybrid_score": ch.get('hybrid_score', 0),
+                    "bm25_score": ch.get('bm25_score', 0),
+                    "embedding_score": ch.get('embedding_score', 0)
                 }
-                for chunk in top_chunks
+                for ch in top_chunks
             ],
             "gemini_analysis": gemini_results,
             "summary": {
-                "top_insights": [result["gemini_analysis"][:200] + "..." if len(result["gemini_analysis"]) > 200 else result["gemini_analysis"] for result in gemini_results if not result.get("error", False)]
+                "top_insights": response_top_insights
             },
             "insight_id": insight_id
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error analyzing chunks with Gemini: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
@@ -785,7 +867,7 @@ Title: <compelling title>
             api_key=os.getenv("VITE_GEMINI_API_KEY"),
             model=req.gemini_model or GEMINI_DEFAULT_MODEL
         )
-
+        print(script)
         return {
             "metadata": {
                 "persona": persona,
@@ -828,12 +910,10 @@ async def tts(req: TTSRequest):
             raise HTTPException(status_code=500, detail="azure-cognitiveservices-speech is not installed. pip install azure-cognitiveservices-speech")
 
         # Support both standard and VITE_* env var names
-        speech_key = "3QxG0dKf63DYCJ3viQXNB3FpeKeNBXHYZBr9LgdKP5uypLUbHqxyJQQJ99BHACYeBjFXJ3w3AAAAACOGnhao"
-        speech_region = "eastus"
-        if not speech_key or not speech_region:
+        if not os.getenv("SPEECH_API_KEY") or not os.getenv("SPEECH_REGION"):
             raise HTTPException(status_code=500, detail="Missing SPEECH_KEY/SPEECH_REGION environment variables")
 
-        speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+        speech_config = speechsdk.SpeechConfig(subscription=os.getenv("SPEECH_API_KEY"), region=os.getenv("SPEECH_REGION"))
         # Output format
         fmt = (req.audio_format or "mp3").lower()
         if fmt == "wav":
@@ -969,7 +1049,7 @@ Title: <compelling title>
     try:
         import azure.cognitiveservices.speech as speechsdk  # type: ignore
         speech_key = os.getenv("SPEECH_API_KEY")
-        speech_region = os.getenv("SPEECH_REGION") or os.getenv("AZURE_SPEECH_REGION")
+        speech_region = os.getenv("SPEECH_REGION")
         if not speech_key or not speech_region:
             raise RuntimeError("Missing Azure Speech credentials")
         speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
@@ -1004,6 +1084,115 @@ async def get_insight_audio(project_name: str, insight_id: str):
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail="Audio not found")
     return FileResponse(audio_path, media_type="audio/mpeg")
+
+@app.get("/projects/{project_name}/insights")
+async def list_project_insights(project_name: str):
+    """List all saved insights for a project"""
+    try:
+        project = _safe_project_name(project_name)
+        insights_dir = _insights_dir(project)
+        if not insights_dir.exists():
+            return {"insights": []}
+        
+        insights = []
+        for insight_dir in insights_dir.iterdir():
+            if insight_dir.is_dir():
+                analysis_file = insight_dir / "analysis.json"
+                if analysis_file.exists():
+                    try:
+                        import aiofiles
+                        async with aiofiles.open(analysis_file, 'r', encoding='utf-8') as f:
+                            content = await f.read()
+                        analysis = json.loads(content)
+                        
+                        # Check if audio exists
+                        audio_path = insight_dir / "podcast.mp3"
+                        has_audio = audio_path.exists()
+                        
+                        # Get script if available
+                        script_path = insight_dir / "script.txt"
+                        script = ""
+                        if script_path.exists():
+                            async with aiofiles.open(script_path, 'r', encoding='utf-8') as sf:
+                                script = await sf.read()
+                        
+                        insights.append({
+                            "insight_id": insight_dir.name,
+                            "metadata": analysis.get("metadata", {}),
+                            "summary": analysis.get("summary", {}),
+                            "has_audio": has_audio,
+                            "script": script,
+                            "created_at": analysis_file.stat().st_ctime
+                        })
+                    except Exception as e:
+                        print(f"Error reading insight {insight_dir.name}: {e}")
+                        continue
+        
+        # Sort by creation time (newest first)
+        insights.sort(key=lambda x: x["created_at"], reverse=True)
+        return {"insights": insights}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing insights: {e}")
+
+@app.get("/projects/{project_name}/insights/{insight_id}")
+async def get_project_insight(project_name: str, insight_id: str):
+    """Get a specific insight with full analysis data"""
+    try:
+        project = _safe_project_name(project_name)
+        insight_dir = _insight_dir(project, insight_id)
+        analysis_file = insight_dir / "analysis.json"
+        
+        if not analysis_file.exists():
+            raise HTTPException(status_code=404, detail="Insight not found")
+        
+        import aiofiles
+        async with aiofiles.open(analysis_file, 'r', encoding='utf-8') as f:
+            content = await f.read()
+        analysis = json.loads(content)
+        
+        # Check if audio exists
+        audio_path = insight_dir / "podcast.mp3"
+        audio_url = f"/insight-audio/{project}/{insight_id}.mp3" if audio_path.exists() else None
+        
+        # Get script if available
+        script_path = insight_dir / "script.txt"
+        script = ""
+        if script_path.exists():
+            async with aiofiles.open(script_path, 'r', encoding='utf-8') as sf:
+                script = await sf.read()
+        
+        return {
+            **analysis,
+            "audio_url": audio_url,
+            "script": script
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting insight: {e}")
+
+@app.delete("/projects/{project_name}/insights/{insight_id}")
+async def delete_project_insight(project_name: str, insight_id: str):
+    """Delete an insight and all associated files (analysis, audio, script)"""
+    try:
+        project = _safe_project_name(project_name)
+        insight_dir = _insight_dir(project, insight_id)
+        
+        if not insight_dir.exists():
+            raise HTTPException(status_code=404, detail="Insight not found")
+        
+        # Remove all files in the insight directory
+        import shutil
+        shutil.rmtree(insight_dir)
+        
+        return {"message": f"Insight {insight_id} deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting insight: {e}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,19 +1,36 @@
-import { type ReactNode } from 'react';
-import AnimatedBackground from './AnimatedBackground';
-import GradientOverlays from './GradientOverlays';
+import { type PropsWithChildren } from "react";
+import { createPortal } from "react-dom";
+import AnimatedBackground from "./AnimatedBackground";
+import GradientOverlays from "./GradientOverlays";
+import FloatingShapes from "./FloatingShapes";
+import FloatingDocuments from "./FloatingDocuments";
+import DataFlowLines from "./DataFlowLines";
+import FloatingCharts from "./FloatingCharts";
+import AIElements from "./AIElements";
+import AdditionalElements from "./AdditionalElements";
 
-interface BackgroundLayoutProps {
-  children: ReactNode;
-  className?: string;
-}
+const BackgroundCanvas = () => (
+  <div className="fixed inset-0 pointer-events-none z-0">
+    {/* Order them as you prefer; all stay pinned to the viewport */}
+    <AnimatedBackground />
+    <GradientOverlays />
+    <FloatingShapes />
+    <FloatingDocuments />
+    <DataFlowLines />
+    <FloatingCharts />
+    <AIElements />
+    <AdditionalElements />
+  </div>
+);
 
-const BackgroundLayout = ({ children, className = "" }: BackgroundLayoutProps) => {
+const BackgroundLayout = ({ children }: PropsWithChildren) => {
   return (
-    <div className={`min-h-screen relative overflow-hidden bg-gradient-to-br from-gray-900 via-blue-900 to-indigo-900 ${className}`}>
-      <AnimatedBackground />
-      {children}
-      <GradientOverlays />
-    </div>
+    <>
+      {typeof document !== "undefined" ? createPortal(<BackgroundCanvas />, document.body) : null}
+      <div className="relative z-10 min-h-screen overflow-x-hidden">
+        {children}
+      </div>
+    </>
   );
 };
 
