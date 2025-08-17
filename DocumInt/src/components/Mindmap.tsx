@@ -3,6 +3,7 @@ import * as d3 from "d3";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useLocation } from 'react-router-dom';
+import { useMindmap } from '../contexts/MindmapContext';
 
 // Spacing & animation knobs
 const V_SPACING = 90; // vertical spacing between rows
@@ -16,6 +17,10 @@ interface Node {
   x: number;
   y: number;
   color: string;
+  fileName?: string;
+  page?: number;
+  section?: string;
+  type?: 'root' | 'source' | 'insight';
 }
 
 interface Link {
@@ -26,12 +31,14 @@ interface Link {
 
 interface MindMapProps {
   onClose: () => void;
+  onNavigateToSource?: (s: { fileName: string; page: number; searchText?: string }) => void;
 }
 
-export default function MindMap({ onClose }: Readonly<MindMapProps>) {
+export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMapProps>) {
   const location = useLocation();
   // Get insightsData from route state
   const insightsData = location.state?.insightsData;
+  const { nodes: ctxNodes, links: ctxLinks } = useMindmap();
 
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,14 +53,9 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
 
   const [nodes, setNodes] = useState<Node[]>([
     { id: "1", label: "Central Idea", x: 0, y: 0, color: "#ffcc00" },
-    { id: "2", label: "Branch A", x: 0, y: 0, color: "#4cafef" },
-    { id: "3", label: "Branch B", x: 0, y: 0, color: "#81c784" },
   ]);
 
-  const [links, setLinks] = useState<Link[]>([
-    { id: "e1-2", source: "1", target: "2" },
-    { id: "e1-3", source: "1", target: "3" },
-  ]);
+  const [links, setLinks] = useState<Link[]>([]);
 
   const [newLabel, setNewLabel] = useState("");
   const [parentId, setParentId] = useState("1");
@@ -103,6 +105,16 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
     setNodes((prev) => prev.filter((n) => n.id !== id));
     setLinks((prev) => prev.filter((l) => l.source !== id && l.target !== id));
   }, []);
+
+  // Sync from context (selected text + sources) when changed
+  useEffect(() => {
+    if (Array.isArray(ctxNodes) && ctxNodes.length > 0) {
+      setNodes(ctxNodes as Node[]);
+    }
+    if (Array.isArray(ctxLinks)) {
+      setLinks(ctxLinks as Link[]);
+    }
+  }, [ctxNodes, ctxLinks]);
 
   // --- render static layout with D3 tree + draggable overrides ---
   useEffect(() => {
@@ -290,6 +302,11 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
     allNodes.on("click", (event: MouseEvent, d: any) => {
       if ((event as any).detail && (event as any).detail > 1) return; // ignore dblclick
       if (isDraggingRef.current) return;
+      // If this is a source node with navigation metadata, trigger navigation
+      if (d?.data?.fileName && d?.data?.page) {
+        onNavigateToSource?.({ fileName: d.data.fileName, page: d.data.page, searchText: d.data.section });
+        return;
+      }
       setCollapsedIds((prev) => {
         const next = new Set(prev);
         if (next.has(d.data.id)) next.delete(d.data.id);
@@ -416,7 +433,7 @@ export default function MindMap({ onClose }: Readonly<MindMapProps>) {
 
   // If insightsData is present, use it to set nodes/links
   useEffect(() => {
-    if (insightsData && insightsData.persona && Array.isArray(insightsData.chunks) && insightsData.chunks.length > 0) {
+    if (insightsData?.persona && Array.isArray(insightsData.chunks) && insightsData.chunks.length > 0) {
       const newNodes: Node[] = [
         { id: "1", label: insightsData.persona, x: 0, y: 0, color: "#ffcc00" }
       ];

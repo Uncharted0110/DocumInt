@@ -62,6 +62,8 @@ const Arena = () => {
     // Free layout mode (draggable/resizable panels)
     const [isFreeLayout, setIsFreeLayout] = useState(false);
     const canvasRef = useRef<HTMLDivElement>(null);
+    const prevLayoutRef = useRef<Record<PanelKey, PanelState> | null>(null);
+    const prevOutlineLayoutRef = useRef<Record<PanelKey, PanelState> | null>(null);
 
     type PanelKey = 'list' | 'outline' | 'viewer' | 'insights';
     type PanelState = { x: number; y: number; w: number; h: number; z: number };
@@ -273,6 +275,82 @@ const Arena = () => {
     }, [pdfList, chatHistory, projectName]);
 
     // Handlers
+    const handleHideOutline = useCallback(() => {
+        setPanels((prevPanels) => {
+            const p = prevPanels ?? computeDefaultPanels();
+            // Store layout to restore later
+            prevOutlineLayoutRef.current = p;
+            const gap = 16;
+            const freed = (p.outline?.w ?? 0) + gap;
+            // Expand viewer leftwards while keeping its right edge constant
+            const viewerRight = p.viewer.x + p.viewer.w;
+            const newViewerX = Math.max(8, p.viewer.x - freed);
+            const newViewerW = Math.max(340, viewerRight - newViewerX);
+            return { ...p, viewer: { ...p.viewer, x: newViewerX, w: newViewerW, z: Date.now() } };
+        });
+        setIsOutlineVisible(false);
+    }, [computeDefaultPanels]);
+
+    const handleShowOutline = useCallback(() => {
+        setIsOutlineVisible(true);
+        setPanels((prevPanels) => {
+            const p = prevPanels ?? computeDefaultPanels();
+            const base = prevOutlineLayoutRef.current ?? computeDefaultPanels();
+            prevOutlineLayoutRef.current = null;
+            // Restore viewer and outline from saved layout
+            return { ...p, outline: base.outline, viewer: base.viewer };
+        });
+    }, [computeDefaultPanels]);
+    const toggleSidebarMinimize = useCallback(() => {
+        setIsSidebarMinimized((prevMin) => {
+            const nextMin = !prevMin;
+            setPanels((prevPanels) => {
+                const p = prevPanels ?? computeDefaultPanels();
+                if (nextMin) {
+                    // Collapse list to a narrow visible strip and shift outline/viewer left to cover freed space
+                    prevLayoutRef.current = p;
+                    const collapsedW = 56; // narrow strip for tabs-like browsing
+                    const origW = p.list?.w ?? 0;
+                    const freed = Math.max(0, origW - collapsedW);
+                    const maxZ = Math.max(p.list.z, p.outline.z, p.viewer.z, p.insights.z);
+                    const next: Record<PanelKey, PanelState> = {
+                        ...p,
+                        list: { ...p.list, w: collapsedW, z: maxZ + 2 },
+                        outline: p.outline,
+                        viewer: p.viewer,
+                        insights: p.insights,
+                    } as any;
+                    if (freed > 0) {
+                        const gap = 16;
+                        if (isOutlineVisible) {
+                            const newOutlineX = Math.max(8, p.outline.x - freed);
+                            const newOutlineW = p.outline.w + freed;
+                            const outlineRight = newOutlineX + newOutlineW; // keep the right edge steady visually
+                            const viewerRight = p.viewer.x + p.viewer.w; // preserve original right bound against insights
+                            const candidateX = Math.max(8, p.viewer.x - freed);
+                            const newViewerX = Math.max(candidateX, outlineRight + gap);
+                            const newViewerW = Math.max(340, viewerRight - newViewerX);
+                            next.outline = { ...p.outline, x: newOutlineX, w: newOutlineW, z: Date.now() };
+                            next.viewer = { ...p.viewer, x: newViewerX, w: newViewerW, z: Date.now() };
+                        } else {
+                            // No outline: shift viewer left while keeping its right edge constant
+                            const viewerRight = p.viewer.x + p.viewer.w;
+                            const newViewerX = Math.max(8, p.viewer.x - freed);
+                            const newViewerW = Math.max(340, viewerRight - newViewerX);
+                            next.viewer = { ...p.viewer, x: newViewerX, w: newViewerW, z: Date.now() };
+                        }
+                    }
+                    return next;
+                } else {
+                    // Restore previous layout if available
+                    const base = prevLayoutRef.current ?? computeDefaultPanels();
+                    prevLayoutRef.current = null;
+                    return { ...p, ...base };
+                }
+            });
+            return nextMin;
+        });
+    }, [computeDefaultPanels, isOutlineVisible]);
     const handlePdfSelection = (file: File) => {
         const idx = pdfList.indexOf(file);
         setSelectedPdf(file);
@@ -422,6 +500,7 @@ const Arena = () => {
 
                     {/* Unified Layout using DRP; editable toggles with isFreeLayout */}
                     <div ref={canvasRef} className="relative flex-1 z-[1] select-none">
+                        {/* Minimized list remains visible as a narrow strip; no extra restore button needed */}
                         {/* Layout Controls (only in edit mode) */}
                         {isFreeLayout && (
                             <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] flex gap-2">
@@ -437,28 +516,30 @@ const Arena = () => {
                             <>
                                 <DRP id="list" title="PDFs" editable={isFreeLayout} state={p.list} setState={(s)=>setPanels(prev=>prev?{...prev,list:s}:prev)} boundsRef={canvasRef} minW={240} minH={200} highlight={highlightKey==='list'}>
                                     <div className={`glass-panel glass-dark rounded-2xl overflow-hidden w-full h-full gradient-ring sheen ${highlightKey==='list' ? 'focus-flash' : ''}`}> 
-                                        <PDFListSidebar projectName={projectName} files={pdfList} selectedPdf={selectedPdf} onPdfSelect={handlePdfSelection} isMinimized={isSidebarMinimized} onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)} onRemovePdf={handleRemoveSidebarPdf} onBack={() => navigate('/')} />
+                                        <PDFListSidebar projectName={projectName} files={pdfList} selectedPdf={selectedPdf} onPdfSelect={handlePdfSelection} isMinimized={isSidebarMinimized} onToggleMinimize={toggleSidebarMinimize} onRemovePdf={handleRemoveSidebarPdf} onBack={() => navigate('/')} />
                                     </div>
                                 </DRP>
 
-                                <DRP id="outline" title="Outline" editable={isFreeLayout} state={p.outline} setState={(s)=>setPanels(prev=>prev?{...prev,outline:s}:prev)} boundsRef={canvasRef} minW={280} minH={220} highlight={highlightKey==='outline'}>
-                                    <div className={`glass-panel rounded-2xl overflow-hidden w-full h-full gradient-ring flex flex-col ${highlightKey==='outline' ? 'focus-flash' : ''}`}>
-                                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 backdrop-blur-md">
-                                            <h3 className="font-semibold text-slate-800 tracking-wide">Document Outline</h3>
-                                            <button onClick={() => setIsOutlineVisible(false)} className="p-1.5 rounded-full hover:bg-white/60 transition hover-lift" title="Hide outline">
-                                                <ChevronLeft size={18} className="text-slate-700" />
-                                            </button>
+                                {isOutlineVisible && (
+                                    <DRP id="outline" title="Outline" editable={isFreeLayout} state={p.outline} setState={(s)=>setPanels(prev=>prev?{...prev,outline:s}:prev)} boundsRef={canvasRef} minW={280} minH={220} highlight={highlightKey==='outline'}>
+                                        <div className={`glass-panel rounded-2xl overflow-hidden w-full h-full gradient-ring flex flex-col ${highlightKey==='outline' ? 'focus-flash' : ''}`}>
+                                            <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 backdrop-blur-md">
+                                                <h3 className="font-semibold text-slate-800 tracking-wide">Document Outline</h3>
+                                                <button onClick={handleHideOutline} className="p-1.5 rounded-full hover:bg-white/60 transition hover-lift" title="Hide outline">
+                                                    <ChevronLeft size={18} className="text-slate-700" />
+                                                </button>
+                                            </div>
+                                            <div className="flex-1 overflow-hidden">
+                                                <PDFOutlineSidebar pdfFile={selectedPdf} onPageNavigation={handlePageNavigation} className="h-full overflow-y-auto" />
+                                            </div>
                                         </div>
-                                        <div className="flex-1 overflow-hidden">
-                                            <PDFOutlineSidebar pdfFile={selectedPdf} onPageNavigation={handlePageNavigation} className="h-full overflow-y-auto" />
-                                        </div>
-                                    </div>
-                                </DRP>
+                                    </DRP>
+                                )}
 
                                 <DRP id="viewer" title="Viewer" editable={isFreeLayout} state={p.viewer} setState={(s)=>setPanels(prev=>prev?{...prev,viewer:s}:prev)} boundsRef={canvasRef} minW={520} minH={360} highlight={highlightKey==='viewer'}>
                                     <div className={`relative w-full h-full glass-panel rounded-3xl overflow-hidden gradient-ring ${highlightKey==='viewer' ? 'focus-flash' : ''}`}>
                                         {!isOutlineVisible && (
-                                            <button onClick={() => setIsOutlineVisible(true)} className="absolute top-4 -left-4 z-20 p-2 rounded-full text-white btn-neo hover-lift" title="Show outline">
+                                            <button onClick={handleShowOutline} className="absolute top-1/2 -translate-y-1/2 -left-8 z-20 p-2 rounded-full text-white btn-neo hover-lift" title="Show outline">
                                                 <ChevronRight size={20} />
                                             </button>
                                         )}
@@ -492,7 +573,12 @@ const Arena = () => {
                         className={`fixed top-0 left-0 w-full h-full z-50 transition-transform duration-500 ease-in-out ${isMindmapVisible ? 'translate-x-0' : 'translate-x-full'}`}
                     >
                         <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-xl" />
-                        {isMindmapVisible && <MindMap onClose={() => setIsMindmapVisible(false)} />}
+                        {isMindmapVisible && (
+                            <MindMap
+                                onClose={() => setIsMindmapVisible(false)}
+                                onNavigateToSource={handleNavigateToSource}
+                            />
+                        )}
                     </div>
                 </div>
             )}
