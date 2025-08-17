@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-    ChevronLeft, ChevronRight, BrainCircuit
+    ChevronLeft, ChevronRight, BrainCircuit, Move
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PDFViewer from '../components/PDFViewer';
@@ -62,8 +62,19 @@ const Arena = () => {
     const [isCachingAppend, setIsCachingAppend] = useState(false);
     const [appendStatus, setAppendStatus] = useState('');
 
+    // Free layout mode (draggable/resizable panels)
+    const [isFreeLayout, setIsFreeLayout] = useState(false);
+    const canvasRef = useRef<HTMLDivElement>(null);
+
+    type PanelKey = 'list' | 'outline' | 'viewer' | 'insights';
+    type PanelState = { x: number; y: number; w: number; h: number; z: number };
+    const [panels, setPanels] = useState<Record<PanelKey, PanelState> | null>(null);
+    const [highlightKey, setHighlightKey] = useState<PanelKey | null>(null);
+
     // Storage key for persistence
     const STORAGE_KEY = `arena_pdfs_${projectName}`;
+    // Bump layout key to force fresh defaults for everyone
+    const LAYOUT_KEY = `arena_layout_v3_${projectName}`;
 
     // Load Adobe PDF Embed API
     useEffect(() => {
@@ -146,6 +157,69 @@ const Arena = () => {
         setIsInitialized(true);
     }, [files, projectName, isInitialized]);
 
+    // Initialize default free-layout panel positions based on canvas size
+    const computeDefaultPanels = useCallback((): Record<PanelKey, PanelState> => {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const W = rect?.width ?? window.innerWidth;
+        const H = rect?.height ?? window.innerHeight;
+
+        const margin = 16;
+        const gap = 16;
+        const listW = Math.max(260, Math.min(320, W * 0.18));
+        const outlineW = 320; // consistent with app outline width
+        const insightsW = Math.max(360, Math.min(420, W * 0.22));
+
+        const listX = margin;
+        const outlineX = listX + listW + gap;
+        const insightsX = W - insightsW - margin;
+        const viewerX = outlineX + outlineW + gap; // after outline
+        const viewerMaxRight = insightsX - gap; // leave gap before insights
+        const viewerAvailW = Math.max(340, viewerMaxRight - viewerX);
+        const viewerW = Math.max(520, Math.min(viewerAvailW, Math.max(520, W * 0.45)));
+
+        return {
+            list:    { x: listX, y: margin, w: listW, h: H - margin * 2, z: 2 },
+            outline: { x: outlineX, y: margin, w: outlineW, h: H - margin * 2, z: 2 },
+            viewer:  { x: viewerX, y: margin, w: Math.max(420, Math.min(viewerW, viewerMaxRight - viewerX)), h: H - margin * 2, z: 1 },
+            insights:{ x: insightsX, y: margin, w: insightsW, h: H - margin * 2, z: 2 },
+        };
+    }, []);
+
+    const ensurePanels = useCallback(() => {
+        if (panels) return panels;
+        const saved = localStorage.getItem(LAYOUT_KEY);
+    if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+        if (parsed?.viewer && parsed?.list && parsed?.outline && parsed?.insights) {
+                    setPanels(parsed);
+                    return parsed;
+                }
+            } catch {}
+        }
+        const defaults = computeDefaultPanels();
+        setPanels(defaults);
+        return defaults;
+    }, [LAYOUT_KEY, panels, computeDefaultPanels]);
+
+    const resetToDefaults = useCallback(() => {
+        const defaults = computeDefaultPanels();
+        setPanels(defaults);
+        localStorage.setItem(LAYOUT_KEY, JSON.stringify(defaults));
+    }, [computeDefaultPanels, LAYOUT_KEY]);
+
+    useEffect(() => {
+        // Always ensure panels exist so layout persists even when not editing
+        ensurePanels();
+    }, [ensurePanels]);
+
+    // Persist panel layout
+    useEffect(() => {
+        if (!panels) return;
+        const id = setTimeout(() => localStorage.setItem(LAYOUT_KEY, JSON.stringify(panels)), 250);
+        return () => clearTimeout(id);
+    }, [panels, LAYOUT_KEY]);
+
     // Update pdfUrls when pdfList changes
     useEffect(() => {
         if (pdfList.length === 0) {
@@ -216,6 +290,37 @@ const Arena = () => {
         console.log(fullMessage);
         setNavigationPage(page);
         // Text highlighting will be implemented in future updates
+    };
+
+    // Navigate to a source across PDFs from Insights
+    const handleNavigateToSource = ({ fileName, page, searchText }: { fileName: string; page: number; searchText?: string }) => {
+        try {
+            if (!fileName) return;
+            const norm = fileName.trim().toLowerCase();
+            const idx = pdfList.findIndex(f => f.name.toLowerCase() === norm || f.name.toLowerCase().endsWith('/' + norm));
+            if (idx === -1) {
+                console.warn('Source PDF not found in current project:', fileName);
+                return;
+            }
+            const target = pdfList[idx];
+            const goTo = Math.max(0, (Number(page) || 1) - 1);
+            // If this PDF is not selected, switch then navigate after a short delay
+            if (!selectedPdf || selectedPdf.name !== target.name) {
+                setSelectedPdf(target);
+                setPdfFileName(target.name);
+                const url = pdfUrls[idx];
+                if (url) setPdfUrl(url);
+                // Defer navigation a bit to allow viewer to mount the new PDF
+                window.setTimeout(() => setNavigationPage(goTo), 300);
+            } else {
+                setNavigationPage(goTo);
+            }
+            if (searchText) {
+                // In future we can emit a highlight event using Adobe APIs with searchText
+            }
+        } catch (e) {
+            console.debug('Failed to navigate to source', e);
+        }
     };
 
     // Handle selected text search in chat
@@ -384,33 +489,33 @@ const Arena = () => {
     // Update the return statement to show loading state
     return (
         <>
-            <style>{`
-                /* Hide scrollbars globally while maintaining scroll functionality */
-                ::-webkit-scrollbar {
-                    display: none;
-                }
-                
-                /* Hide scrollbars for Firefox */
-                * {
-                    scrollbar-width: none;
-                }
-                
-                /* Ensure smooth scrolling */
-                * {
-                    -ms-overflow-style: none;
-                    scroll-behavior: smooth;
-                }
-            `}</style>
             {isLoading ? (
-                <div className="h-screen flex items-center justify-center bg-gray-50">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-900 mb-4"></div>
-                        <p className="text-gray-600">Loading DocumInt...</p>
+                <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-[#0a1653] to-indigo-900 relative overflow-hidden">
+                    {/* Animated aurora while loading */}
+                    <div className="aurora-bg">
+                        <div className="aurora-blob" style={{left:'-10%', top:'-8%'}} />
+                        <div className="aurora-blob blob-2" />
+                        <div className="aurora-blob blob-3" />
+                    </div>
+                    <div className="text-center glass-panel rounded-2xl px-10 py-8 gradient-ring">
+                        <div className="relative mx-auto mb-5 h-16 w-16 rounded-full bg-gradient-to-br from-indigo-400/40 to-fuchsia-400/40 shadow-inner flex items-center justify-center">
+                            <div className="h-11 w-11 rounded-full border-2 border-white/30 border-t-transparent animate-spin" />
+                        </div>
+                        <p className="text-white/90 font-medium tracking-wide">Warming up DocumInt…</p>
                     </div>
                 </div>
             ) : (
-                <div className="h-screen bg-gray-50 flex flex-col relative overflow-hidden">
+                <div className="h-screen flex flex-col relative overflow-hidden">
                     {isCachingAppend && <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex flex-col items-center justify-center"><div className="animate-spin h-14 w-14 border-4 border-blue-600 border-t-transparent rounded-full mb-4"/><div className="text-sm text-gray-700">{appendStatus || 'Updating embeddings…'}</div></div>}
+                    {/* Page-wide purple gradient underlay */}
+                    <div className="page-purple-gradient" />
+                    {/* Background aurora */}
+                    <div className="aurora-bg">
+                        <div className="aurora-blob" style={{left:'-8%', top:'-10%'}} />
+                        <div className="aurora-blob blob-2" />
+                        <div className="aurora-blob blob-3" />
+                        <div className="aurora-blob blob-4" />
+                    </div>
                     {/* Hidden file input */}
                     <input
                         type="file"
@@ -421,89 +526,65 @@ const Arena = () => {
                         onChange={handleFileUpload}
                     />
 
-                    {/* Main Content Layout */}
-                    <div className="flex flex-1">
-                        {/* Left Sidebars Container */}
-                        <div className="flex">
-                            {/* PDF List Sidebar */}
-                            <PDFListSidebar
-                                projectName={projectName}
-                                files={pdfList}
-                                selectedPdf={selectedPdf}
-                                onPdfSelect={handlePdfSelection}
-                                isMinimized={isSidebarMinimized}
-                                onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)}
-                                onRemovePdf={handleRemoveSidebarPdf}
-                                onBack={() => navigate('/')}
-                            />
+                    {/* Unified Layout using DRP; editable toggles with isFreeLayout */}
+                    <div ref={canvasRef} className="relative flex-1 z-[1] select-none">
+                        {/* Layout Controls (only in edit mode) */}
+                        {isFreeLayout && (
+                            <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] flex gap-2">
+                                <button className="px-3 py-1.5 rounded-full chip-neo hover-lift text-xs" onClick={() => { if (!panels) return; setPanels(p=> p? { ...p, list: { ...p.list, z: Date.now() } }:p); setHighlightKey('list'); setTimeout(()=>setHighlightKey(null), 900); }}>PDFs</button>
+                                <button className="px-3 py-1.5 rounded-full chip-neo hover-lift text-xs" onClick={() => { if (!panels) return; setPanels(p=> p? { ...p, viewer: { ...p.viewer, z: Date.now() } }:p); setHighlightKey('viewer'); setTimeout(()=>setHighlightKey(null), 900); }}>Viewer</button>
+                                <button className="px-3 py-1.5 rounded-full chip-neo hover-lift text-xs" onClick={() => { if (!panels) return; setPanels(p=> p? { ...p, outline: { ...p.outline, z: Date.now() } }:p); setHighlightKey('outline'); setTimeout(()=>setHighlightKey(null), 900); }}>Outline</button>
+                                <button className="px-3 py-1.5 rounded-full chip-neo hover-lift text-xs" onClick={() => { if (!panels) return; setPanels(p=> p? { ...p, insights: { ...p.insights, z: Date.now() } }:p); setHighlightKey('insights'); setTimeout(()=>setHighlightKey(null), 900); }}>Insights</button>
+                            </div>
+                        )}
 
-                            {/* PDF Outline Sidebar */}
-                            <div className={`border-r border-gray-200 transition-all duration-300 ease-in-out ${isOutlineVisible ? 'w-80' : 'w-0 overflow-hidden'
-                                }`}>
-                                <div className="h-full bg-gray-50 flex flex-col">
-                                    <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
-                                        <h3 className="font-semibold text-gray-700">Document Outline</h3>
-                                        <button
-                                            onClick={() => setIsOutlineVisible(false)}
-                                            className="p-1 hover:bg-gray-200 rounded-full"
-                                            title="Hide outline"
-                                        >
-                                            <ChevronLeft size={18} className="text-gray-600" />
-                                        </button>
+                        {/* Panels */}
+                        {(() => { const p = ensurePanels(); return (
+                            <>
+                                <DRP id="list" title="PDFs" editable={isFreeLayout} state={p.list} setState={(s)=>setPanels(prev=>prev?{...prev,list:s}:prev)} boundsRef={canvasRef} minW={240} minH={200} highlight={highlightKey==='list'}>
+                                    <div className={`glass-panel glass-dark rounded-2xl overflow-hidden w-full h-full gradient-ring sheen ${highlightKey==='list' ? 'focus-flash' : ''}`}> 
+                                        <PDFListSidebar projectName={projectName} files={pdfList} selectedPdf={selectedPdf} onPdfSelect={handlePdfSelection} isMinimized={isSidebarMinimized} onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)} onRemovePdf={handleRemoveSidebarPdf} onBack={() => navigate('/')} />
                                     </div>
-                                    {/* Scrollable outline content */}
-                                    <div className="flex-1 overflow-hidden">
-                                        <PDFOutlineSidebar
-                                            pdfFile={selectedPdf}
-                                            onPageNavigation={handlePageNavigation}
-                                            className="h-full overflow-y-auto"
+                                </DRP>
+
+                                <DRP id="outline" title="Outline" editable={isFreeLayout} state={p.outline} setState={(s)=>setPanels(prev=>prev?{...prev,outline:s}:prev)} boundsRef={canvasRef} minW={280} minH={220} highlight={highlightKey==='outline'}>
+                                    <div className={`glass-panel rounded-2xl overflow-hidden w-full h-full gradient-ring flex flex-col ${highlightKey==='outline' ? 'focus-flash' : ''}`}>
+                                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 backdrop-blur-md">
+                                            <h3 className="font-semibold text-slate-800 tracking-wide">Document Outline</h3>
+                                            <button onClick={() => setIsOutlineVisible(false)} className="p-1.5 rounded-full hover:bg-white/60 transition hover-lift" title="Hide outline">
+                                                <ChevronLeft size={18} className="text-slate-700" />
+                                            </button>
+                                        </div>
+                                        <div className="flex-1 overflow-hidden">
+                                            <PDFOutlineSidebar pdfFile={selectedPdf} onPageNavigation={handlePageNavigation} className="h-full overflow-y-auto" />
+                                        </div>
+                                    </div>
+                                </DRP>
+
+                                <DRP id="viewer" title="Viewer" editable={isFreeLayout} state={p.viewer} setState={(s)=>setPanels(prev=>prev?{...prev,viewer:s}:prev)} boundsRef={canvasRef} minW={520} minH={360} highlight={highlightKey==='viewer'}>
+                                    <div className={`relative w-full h-full glass-panel rounded-3xl overflow-hidden gradient-ring ${highlightKey==='viewer' ? 'focus-flash' : ''}`}>
+                                        {!isOutlineVisible && (
+                                            <button onClick={() => setIsOutlineVisible(true)} className="absolute top-4 -left-4 z-20 p-2 rounded-full text-white btn-neo hover-lift" title="Show outline">
+                                                <ChevronRight size={20} />
+                                            </button>
+                                        )}
+                                        <button onClick={() => setIsMindmapVisible(true)} className="absolute top-4 -right-90 z-30 p-2 rounded-full text-white btn-neo hover-lift" title="Open Mindmap">
+                                            <BrainCircuit size={20} className="text-white" />
+                                        </button>
+                                        <PDFViewer pdfFile={selectedPdf} pdfUrl={pdfUrl} pdfFileName={pdfFileName} isAdobeLoaded={isAdobeLoaded} onFileUpload={handleAddPdf} navigationPage={navigationPage} />
+                                    </div>
+                                </DRP>
+
+                                <DRP id="insights" title="Insights" editable={isFreeLayout} state={p.insights} setState={(s)=>setPanels(prev=>prev?{...prev,insights:s}:prev)} boundsRef={canvasRef} minW={340} minH={280} highlight={highlightKey==='insights'}>
+                                    <div className={`glass-panel rounded-2xl overflow-hidden w-full h-full gradient-ring p-3 pb-2 ${highlightKey==='insights' ? 'focus-flash' : ''}`}>
+                                        <Insights
+                                            projectName={projectName}
+                                            onNavigateToPage={handlePageNavigation}
+                                            onNavigateToSource={handleNavigateToSource}
+                                            onOpenMindmap={() => setIsMindmapVisible(true)}
                                         />
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* PDF Viewer with Toggle Button */}
-                        <div className="flex-1 flex flex-col bg-white relative">
-                            {/* Toggle Button for Outline - positioned at top-left of PDF viewer */}
-                            {!isOutlineVisible && (
-                                <button
-                                    onClick={() => setIsOutlineVisible(true)}
-                                    className="absolute top-4 -left-4 z-20 p-2 hover:bg-gray-100 rounded-full text-[#0a1653] bg-white shadow-lg border border-gray-200 transition-all duration-200 hover:shadow-xl"
-                                    title="Show outline"
-                                >
-                                    <ChevronRight size={20} />
-                                </button>
-                            )}
-
-                            <button
-                                onClick={() => setIsMindmapVisible(true)}
-                                className="absolute top-4 -right-90 z-30 p-2 rounded-full text-white bg-[#0a1653] shadow-lg border border-gray-200 transition-all duration-200 hover:shadow-xl hover:bg-[#091240]"
-                                title="Open Mindmap"
-                            >
-                                <BrainCircuit size={20} className="text-white" />
-                            </button>
-
-
-                            <PDFViewer
-                                pdfFile={selectedPdf}
-                                pdfUrl={pdfUrl}
-                                pdfFileName={pdfFileName}
-                                isAdobeLoaded={isAdobeLoaded}
-                                onFileUpload={handleAddPdf}
-                                navigationPage={navigationPage}
-                            />
-                        </div>
-
-                        {/* Chat Panel */}
-                        <div className={`lg:static lg:w-96 lg:z-auto lg:translate-x-0 flex flex-col`}>
-                            <div className="p-3 pb-2 border-b border-gray-200 bg-gray-50">
-                                <Insights 
-                                    projectName={projectName} 
-                                    onNavigateToPage={handlePageNavigation}
-                                />
-                            </div>
-                        </div>
+                                </DRP>
 
                         {/* Selection Bulb Component */}
                         <SelectionBulb 
@@ -543,13 +624,28 @@ const Arena = () => {
 
                     {/* Mindmap Overlay */}
                     <div
-                        className={`fixed top-0 left-0 w-full h-full bg-white z-50 transition-transform duration-500 ease-in-out ${isMindmapVisible ? 'translate-x-0' : 'translate-x-full'
-                            }`}
+                        className={`fixed top-0 left-0 w-full h-full z-50 transition-transform duration-500 ease-in-out ${isMindmapVisible ? 'translate-x-0' : 'translate-x-full'}`}
                     >
+                        <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-xl" />
                         {isMindmapVisible && <MindMap onClose={() => setIsMindmapVisible(false)} />}
                     </div>
                 </div>
             )}
+            {/* Edit Layout toggle + Reset (visible in edit mode) */}
+            <div className="fixed top-3 right-3 z-[60] flex items-center gap-2">
+                {isFreeLayout && (
+                    <button
+                        className="px-3 py-1.5 rounded-full chip-neo hover-lift text-sm"
+                        onClick={resetToDefaults}
+                        title="Reset layout to defaults"
+                    >
+                        Reset layout
+                    </button>
+                )}
+                <button className="px-3 py-1.5 rounded-full btn-neo hover-lift text-sm flex items-center gap-2" onClick={() => setIsFreeLayout(v=>!v)} title="Toggle free layout">
+                    <Move size={16} /> {isFreeLayout ? 'Exit layout' : 'Edit layout'}
+                </button>
+            </div>
         </>
     );
 };
@@ -562,4 +658,99 @@ const addNewFiles = (current: File[], incoming: File[]) => {
         if (!updated.some(ex => sameFile(ex, f))) updated.push(f);
     }
     return updated;
+};
+
+// Draggable + Resizable Panel (no external deps)
+type DRPProps = {
+    id: string; title?: string; state: { x:number; y:number; w:number; h:number; z:number };
+    setState: (s: { x:number; y:number; w:number; h:number; z:number }) => void;
+    boundsRef: React.RefObject<HTMLDivElement | null>; children: React.ReactNode; editable: boolean;
+    minW?: number; minH?: number; highlight?: boolean;
+};
+
+const DRP: React.FC<DRPProps> = ({ id, title, state, setState, boundsRef, children, editable, minW=200, minH=160, highlight }) => {
+    const elRef = useRef<HTMLDivElement>(null);
+
+    const clamp = (x:number,y:number,w:number,h:number) => {
+        const b = boundsRef.current?.getBoundingClientRect();
+        const BW = b?.width ?? window.innerWidth; const BH = b?.height ?? window.innerHeight;
+        const nx = Math.max(0, Math.min(x, BW - Math.max(w, 80)));
+        const ny = Math.max(0, Math.min(y, BH - Math.max(h, 80)));
+        const nw = Math.max(minW, Math.min(w, BW - nx));
+        const nh = Math.max(minH, Math.min(h, BH - ny));
+        return { nx, ny, nw, nh };
+    };
+
+    const bringToFront = () => {
+        setState({ ...state, z: Date.now() });
+    };
+
+    const onDragStart = (e: React.MouseEvent) => {
+        if (!editable) { return; }
+        e.preventDefault();
+        bringToFront();
+        const startX = e.clientX; const startY = e.clientY;
+        const start = { ...state };
+        const move = (ev: MouseEvent) => {
+            const dx = ev.clientX - startX; const dy = ev.clientY - startY;
+            const { nx, ny } = clamp(start.x + dx, start.y + dy, start.w, start.h);
+            setState({ ...state, x: nx, y: ny, z: Date.now() });
+        };
+        const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+        window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+    };
+
+    const makeResize = (dir: 'e'|'s'|'se'|'w'|'n'|'sw'|'ne'|'nw') => (e: React.MouseEvent) => {
+        if (!editable) { return; }
+        e.preventDefault();
+        bringToFront();
+        const startX = e.clientX; const startY = e.clientY; const start = { ...state };
+        const move = (ev: MouseEvent) => {
+            let x=start.x, y=start.y, w=start.w, h=start.h;
+            const dx = ev.clientX - startX; const dy = ev.clientY - startY;
+            if (dir.includes('e')) w = start.w + dx;
+            if (dir.includes('s')) h = start.h + dy;
+            if (dir.includes('w')) { w = start.w - dx; x = start.x + dx; }
+            if (dir.includes('n')) { h = start.h - dy; y = start.y + dy; }
+            const { nx, ny, nw, nh } = clamp(x,y,w,h);
+            setState({ x: nx, y: ny, w: nw, h: nh, z: Date.now() });
+        };
+        const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+        window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+    };
+
+    return (
+        <div
+            ref={elRef}
+            onMouseDown={bringToFront}
+            style={{ position:'absolute', left: state.x, top: state.y, width: state.w, height: state.h, zIndex: state.z }}
+            className={`group ${highlight ? 'focus-flash' : ''}`}
+        >
+            {/* Drag handle overlay */}
+            {editable && (
+                <div className="absolute left-0 top-0 right-0 h-8 flex items-center gap-2 px-3 text-white/90" onMouseDown={onDragStart}>
+                    <div className="pointer-events-none absolute inset-0 rounded-t-2xl bg-gradient-to-r from-purple-600/70 via-fuchsia-600/60 to-indigo-600/70 opacity-90" />
+                    <Move size={16} className="relative z-10" />
+                    <span className="relative z-10 text-[13px] tracking-wide">{title ?? id}</span>
+                </div>
+            )}
+            {/* Content clipping for rounded corners */}
+            <div className={`w-full h-full ${editable ? 'pt-8' : ''}`}>
+                {children}
+            </div>
+            {/* Resize handles */}
+            {editable && (
+                <>
+                    <div className="absolute right-0 top-0 h-full w-2 cursor-ew-resize" onMouseDown={makeResize('e')} />
+                    <div className="absolute left-0 top-0 h-full w-2 cursor-ew-resize" onMouseDown={makeResize('w')} />
+                    <div className="absolute left-0 bottom-0 w-full h-2 cursor-ns-resize" onMouseDown={makeResize('s')} />
+                    <div className="absolute left-0 top-0 w-full h-2 cursor-ns-resize" onMouseDown={makeResize('n')} />
+                    <div className="absolute right-0 bottom-0 w-3 h-3 cursor-nwse-resize" onMouseDown={makeResize('se')} />
+                    <div className="absolute left-0 bottom-0 w-3 h-3 cursor-nesw-resize" onMouseDown={makeResize('sw')} />
+                    <div className="absolute right-0 top-0 w-3 h-3 cursor-nesw-resize" onMouseDown={makeResize('ne')} />
+                    <div className="absolute left-0 top-0 w-3 h-3 cursor-nwse-resize" onMouseDown={makeResize('nw')} />
+                </>
+            )}
+        </div>
+    );
 };

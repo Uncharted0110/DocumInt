@@ -164,7 +164,7 @@ const Chat: React.FC<ChatProps> = ({
       {/* Chat Bubble FAB */}
       <button 
         onClick={toggleChat} 
-        className="fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition-colors"
+        className="fixed bottom-4 right-4 z-[2147483647] w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition-colors"
         title={isOpen ? "Close chat" : "Open chat"}
       >
         {isOpen ? <X size={24}/> : <MessageCircle size={28}/>}
@@ -172,7 +172,7 @@ const Chat: React.FC<ChatProps> = ({
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-24 right-4 z-40 bg-white rounded-lg shadow-2xl border border-gray-200 w-96 h-[560px] flex flex-col">
+  <div className="fixed bottom-24 right-4 z-[2147483647] bg-white rounded-lg shadow-2xl border border-gray-200 w-96 h-[560px] flex flex-col">
           <div className="flex items-center justify-between p-3 border-b border-gray-200">
             <div className="font-semibold text-gray-700">Chat Assistant</div>
             <button onClick={toggleChat} className="text-gray-500 hover:text-gray-700">

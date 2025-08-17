@@ -53,7 +53,6 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
   }, [selectedText, isGenerating]);
 
   useEffect(() => {
-    if (!apis) return;
     const checkSelection = async () => {
       try {
         const adobeApis = (window as any).__ADOBE_APIS__;
@@ -181,7 +180,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
       <button
         onClick={handleBulbClick}
         disabled={!selectedText || isGenerating || isSearchingChat}
-        className={`fixed bottom-4 right-20 z-40 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
+  className={`fixed bottom-6 right-28 z-[2147483647] w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
         title={buttonTitle}
         style={{
           boxShadow: isVisible && !isGenerating && !isSearchingChat ? '0 0 20px rgba(255, 193, 7, 0.6), 0 0 40px rgba(255, 193, 7, 0.4)' : undefined
@@ -192,7 +191,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
 
       {/* Popover */}
       {showPopover && (
-        <div className="fixed bottom-20 right-20 z-50 bg-white rounded-lg shadow-xl border border-gray-200 w-96 max-w-sm">
+  <div className="fixed bottom-24 right-28 z-[2147483647] bg-white rounded-lg shadow-xl border border-gray-200 w-96 max-w-sm">
           <div className="p-4 space-y-3">
             <div className="font-semibold text-gray-800">Selected Text ({selectedText.length})</div>
             <div className="max-h-40 overflow-y-auto bg-gray-50 p-3 rounded text-sm text-gray-700 border whitespace-pre-wrap">{selectedText}</div>
