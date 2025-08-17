@@ -6,7 +6,7 @@ interface SelectionBulbProps {
   onGenerateInsight?: (selectedText: string) => void; // optional backward compatibility
 }
 
-const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight }) => {
+const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis: _apis, onGenerateInsight }) => {
   const [selectedText, setSelectedText] = useState('');
   const [isVisible, setIsVisible] = useState(false);
   const [showPopover, setShowPopover] = useState(false);
@@ -14,7 +14,6 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight }
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!apis) return;
     const checkSelection = async () => {
       try {
         const selection = await (window as any).__ADOBE_APIS__?.getSelectedContent?.();
@@ -33,7 +32,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight }
     };
     const interval = setInterval(checkSelection, 500);
     return () => clearInterval(interval);
-  }, [apis, isGenerating]);
+  }, [isGenerating]);
 
   const handleBulbClick = () => {
     if (!selectedText) return;
@@ -84,7 +83,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight }
       <button
         onClick={handleBulbClick}
         disabled={!selectedText || isGenerating}
-        className={`fixed bottom-4 right-20 z-40 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
+  className={`fixed bottom-6 right-28 z-[2147483647] w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
         title={isGenerating ? 'Generating...' : 'Text selected - click for options'}
       >
         <Lightbulb size={24} />
@@ -92,7 +91,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight }
 
       {/* Popover */}
       {showPopover && (
-        <div className="fixed bottom-20 right-20 z-50 bg-white rounded-lg shadow-xl border border-gray-200 w-96 max-w-sm">
+  <div className="fixed bottom-24 right-28 z-[2147483647] bg-white rounded-lg shadow-xl border border-gray-200 w-96 max-w-sm">
           <div className="p-4 space-y-3">
             <div className="font-semibold text-gray-800">Selected Text ({selectedText.length})</div>
             <div className="max-h-40 overflow-y-auto bg-gray-50 p-3 rounded text-sm text-gray-700 border whitespace-pre-wrap">{selectedText}</div>

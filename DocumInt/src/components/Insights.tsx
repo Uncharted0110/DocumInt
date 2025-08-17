@@ -5,11 +5,16 @@ import { updateProjectInsights, loadProject, type ProjectInsightPersist } from '
 import { useMindmap } from '../contexts/MindmapContext';
 
 interface GeminiAnalysisResp { metadata?: any; retrieval_results?: any[]; gemini_analysis?: any[]; summary?: { top_insights?: string[] }; selected_text?: string; insight_id?: string; }
-interface InsightsProps { projectName?: string; onNavigateToPage?: (page: number, text?: string) => void; }
+interface InsightsProps {
+  projectName?: string;
+  onNavigateToPage?: (page: number, text?: string) => void;
+  onNavigateToSource?: (s: { fileName: string; page: number; searchText?: string }) => void;
+  onOpenMindmap?: () => void;
+}
 
 const palette = ['bg-indigo-50 border-indigo-200','bg-emerald-50 border-emerald-200','bg-amber-50 border-amber-200','bg-sky-50 border-sky-200'];
 
-const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage }) => {
+const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNavigateToSource, onOpenMindmap }) => {
   const [items, setItems] = useState<FlippableCardItem[]>([]);
   const [analysisById, setAnalysisById] = useState<Record<string, GeminiAnalysisResp>>({});
   const [podcastStatus, setPodcastStatus] = useState<Record<string, { state: 'idle'|'loading'|'ready'|'error'; audioUrl?: string }>>({});
@@ -59,12 +64,63 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage }) =>
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-indigo-700 font-semibold text-sm"><Sparkles size={14}/> Generated Insight</div>
         {top.length>0 && <div><div className="text-xs font-semibold text-gray-700 mb-1">Top Points</div><ul className="list-disc ml-4 text-xs space-y-1">{top.map(t=> <li key={t.slice(0,50)}>{t}</li>)}</ul></div>}
-        {retrieval.length>0 && <div><div className="text-xs font-semibold text-gray-700 mb-1">Sources</div><ul className="text-[11px] space-y-1">{retrieval.slice(0,5).map(r=>{ const key=`${r.document}_${r.section_title}_${r.page_number}`; return <li key={key}><button type="button" onClick={(e)=>{ e.stopPropagation(); onNavigateToPage?.(r.page_number-1, r.section_title); }} className="underline text-blue-600 hover:text-blue-800">{r.document}{r.section_title?` • ${r.section_title}`:''} (p.{r.page_number})</button></li>; })}</ul></div>}
-        {details.length>0 && <div className="space-y-2"><div className="text-xs font-semibold text-gray-700">Details</div>{details.slice(0,3).map((d,i)=>{ const key=`det_${i}`; return <div key={key} className="border rounded p-2 bg-gray-50"><div className="text-[11px] text-gray-500 mb-1">{d.document} • {d.section_title} (p.{d.page_number})</div><div className="text-xs whitespace-pre-wrap leading-snug">{(d.gemini_analysis||'').slice(0,800)}</div></div>; })}</div>}
-        <div><button type="button" onClick={(e)=>{ e.stopPropagation(); buildMindmap(selected, analysis); }} className="px-2 py-1 text-[11px] rounded bg-purple-600 text-white hover:bg-purple-700">View Mindmap</button></div>
+        {retrieval.length>0 && (
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1">Sources</div>
+            <ul className="text-[11px] space-y-1">
+              {retrieval.slice(0,5).map(r => {
+                const key = `${r.document}_${r.section_title}_${r.page_number}`;
+                const docStr = String(r.document ?? '');
+                const base = docStr.split(/[/\\]/).pop() || docStr;
+                return (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onNavigateToSource) {
+                          onNavigateToSource({ fileName: base, page: Number(r.page_number) || 1, searchText: r.section_title });
+                        } else {
+                          // Back-compat fallback
+                          onNavigateToPage?.((Number(r.page_number) || 1) - 1, r.section_title);
+                        }
+                      }}
+                      className="underline text-blue-600 hover:text-blue-800"
+                    >
+                      {docStr}{r.section_title?` • ${r.section_title}`:''} (p.{r.page_number})
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        {details.length>0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-gray-700">Details</div>
+            {details.slice(0,3).map((d,i)=>{
+              const key=`det_${i}`;
+              return (
+                <div key={key} className="border rounded p-2 bg-gray-50">
+                  <div className="text-[11px] text-gray-500 mb-1">{d.document} • {d.section_title} (p.{d.page_number})</div>
+                  <div className="text-xs whitespace-pre-wrap leading-snug">{(d.gemini_analysis||'').slice(0,800)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div>
+          <button
+            type="button"
+            onClick={(e)=>{ e.stopPropagation(); buildMindmap(selected, analysis); onOpenMindmap?.(); }}
+            className="px-2 py-1 text-[11px] rounded bg-purple-600 text-white hover:bg-purple-700"
+          >
+            View Mindmap
+          </button>
+        </div>
       </div>
     );
-  }, [onNavigateToPage, buildMindmap]);
+  }, [onNavigateToPage, onNavigateToSource, onOpenMindmap, buildMindmap]);
 
   // Listen to SelectionBulb event
   useEffect(() => {
