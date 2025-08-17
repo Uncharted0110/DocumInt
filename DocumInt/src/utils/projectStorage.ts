@@ -6,16 +6,12 @@ export interface ChatMessage {
   type: 'bot' | 'user';
   message: string;
   timestamp: string; // stored as ISO string
-  persona?: string;
-  task?: string;
   results?: any[];
 }
 
 export interface ProjectInsightPersist {
   id: string;
-  persona: string;
-  job: string;
-  task: string;
+  task: string; // now stores the selection text / task only
   accentColor?: string;
   analysis?: any; // GeminiAnalysisResponse serialized
   createdAt: string;
@@ -23,8 +19,6 @@ export interface ProjectInsightPersist {
 
 export interface ProjectMetadata {
   name: string;
-  persona?: string;
-  task?: string;
   pdfFileNames: string[];
   updatedAt: string; // ISO
   chatHistory?: ChatMessage[];
@@ -69,8 +63,8 @@ async function fileExists(db: IDBDatabase, projectName: string, fileName: string
   });
 }
 
-export async function saveProjectState(projectName: string, opts: { persona?: string; task?: string; pdfFiles: File[]; chatHistory: ChatMessage[]; insights?: ProjectInsightPersist[] }): Promise<void> {
-  const { persona, task, pdfFiles, chatHistory, insights } = opts;
+export async function saveProjectState(projectName: string, opts: { pdfFiles: File[]; chatHistory: ChatMessage[]; insights?: ProjectInsightPersist[] }): Promise<void> {
+  const { pdfFiles, chatHistory, insights } = opts;
   const db = await openDB();
   // Load existing metadata to preserve insights if not provided
   let existingMeta: ProjectMetadata | undefined;
@@ -119,8 +113,6 @@ export async function saveProjectState(projectName: string, opts: { persona?: st
   });
   const metadata: ProjectMetadata = {
     name: projectName,
-    persona,
-    task,
     pdfFileNames: pdfFiles.map(f => f.name),
     updatedAt: new Date().toISOString(),
     chatHistory: normalizedChat,

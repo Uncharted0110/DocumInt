@@ -25,7 +25,7 @@ const Home = () => {
   const openProject = async (name: string) => {
     const data = await loadProject(name);
     if (data) {
-      navigate('/arena', { state: { projectName: name, files: data.pdfFiles, persona: data.persona, task: data.task } });
+      navigate('/arena', { state: { projectName: name, files: data.pdfFiles } });
     }
   };
 
@@ -35,9 +35,9 @@ const Home = () => {
     setProjects(prev => prev.filter(p => p.name !== name));
   };
 
-  const handleCreateProject = (name: string, files: File[], persona?: string, task?: string) => {
-    console.log('Creating project:', { name, files, persona, task });
-    navigate('/arena', { state: { projectName: name, files, persona, task } });
+  const handleCreateProject = (name: string, files: File[]) => {
+    console.log('Creating project:', { name, files });
+    navigate('/arena', { state: { projectName: name, files } });
   };
 
   const renderProjects = () => {
@@ -51,9 +51,6 @@ const Home = () => {
         </div>
         <h2 className="text-lg font-semibold text-gray-800 mb-1 truncate" title={p.name}>{p.name}</h2>
         <p className="text-xs text-gray-500 mb-2">Updated {new Date(p.updatedAt).toLocaleString()}</p>
-        {(p.persona || p.task) && (
-          <p className="text-sm text-gray-600 truncate">{[p.persona, p.task].filter(Boolean).join(' • ')}</p>
-        )}
         <p className="mt-2 text-xs text-gray-500">{p.pdfFileNames.length} PDF(s)</p>
       </button>
     ));
