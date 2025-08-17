@@ -7,6 +7,11 @@ interface MindmapNode {
   x: number;
   y: number;
   color: string;
+  // Optional navigation metadata (for source nodes)
+  fileName?: string;
+  page?: number;
+  section?: string;
+  type?: 'root' | 'source' | 'insight';
 }
 
 interface MindmapLink {
@@ -41,45 +46,32 @@ export const MindmapProvider: React.FC<MindmapProviderProps> = ({ children }) =>
   ]);
   const [links, setLinks] = useState<MindmapLink[]>([]);
 
-  const updateMindmap = (selectedText: string, insights: any[], sources: any[]) => {
-    // Create new mindmap structure based on selected text and insights
+  const updateMindmap = (selectedText: string, _insights: any[], sources: any[]) => {
+    // Build nodes: root = full selected text; children = source entries with page metadata
     const newNodes: MindmapNode[] = [
-      { id: "1", label: selectedText.substring(0, 50) + "...", x: 0, y: 0, color: "#ffcc00" },
+      { id: '1', label: selectedText, x: 0, y: 0, color: '#ffcc00', type: 'root' },
     ];
     const newLinks: MindmapLink[] = [];
 
-    // Add insight nodes
-    insights.forEach((insight, index) => {
-      const insightId = `insight_${index}`;
-      newNodes.push({
-        id: insightId,
-        label: insight.gemini_analysis?.substring(0, 80) + "..." || `Insight ${index + 1}`,
-        x: 0,
-        y: 0,
-        color: "#4cafef"
-      });
-      newLinks.push({
-        id: `link_${insightId}`,
-        source: "1",
-        target: insightId
-      });
-    });
-
-    // Add source nodes
-    sources.slice(0, 5).forEach((source, index) => {
+    sources.slice(0, 8).forEach((source: any, index: number) => {
       const sourceId = `source_${index}`;
+      const docStr = String(source.document ?? '');
+      const base = docStr.split(/[/\\]/).pop() || docStr;
+      const page = Number(source.page_number) || 1;
+  const section = source.section_title ? ' • ' + String(source.section_title) : '';
+  const label = base + ' (p.' + page + ')' + section;
       newNodes.push({
         id: sourceId,
-        label: `${source.document} - ${source.section_title}`,
+        label,
         x: 0,
         y: 0,
-        color: "#81c784"
+        color: '#81c784',
+        fileName: base,
+        page,
+        section: source.section_title,
+        type: 'source',
       });
-      newLinks.push({
-        id: `link_${sourceId}`,
-        source: "1",
-        target: sourceId
-      });
+      newLinks.push({ id: `link_${sourceId}`, source: '1', target: sourceId });
     });
 
     setNodes(newNodes);
