@@ -9,6 +9,7 @@ interface NewProjectFormProps {
 const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) => {
   const [projectName, setProjectName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -24,30 +25,15 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (projectName && selectedFiles.length > 0) {
+      setIsSubmitting(true);
       // Save PDFs to localStorage before submitting
       const storageKey = `arena_pdfs_${projectName}`;
-
       try {
-        // Store the file names in localStorage for persistence
         const fileNames = selectedFiles.map(file => file.name);
         localStorage.setItem(storageKey, JSON.stringify(fileNames));
-
-        // Also store file metadata for better tracking (optional)
-        const fileMetadata = selectedFiles.map(file => ({
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          lastModified: file.lastModified
-        }));
+        const fileMetadata = selectedFiles.map(file => ({ name: file.name, size: file.size, type: file.type, lastModified: file.lastModified }));
         localStorage.setItem(`${storageKey}_metadata`, JSON.stringify(fileMetadata));
-
-        console.log(`Saved ${selectedFiles.length} PDFs to localStorage for project: ${projectName}`);
-      } catch (error) {
-        console.error('Error saving PDFs to localStorage:', error);
-        // Continue with submission even if localStorage fails
-      }
-
-      // Call the original onSubmit callback
+      } catch (error) { console.error('Error saving PDFs to localStorage:', error); }
       onSubmit(projectName, selectedFiles);
     }
   };
@@ -55,7 +41,8 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
 
-      <div className="bg-white rounded-lg p-6 w-full max-w-xl">
+      <div className="bg-white rounded-lg p-6 w-full max-w-xl relative">
+        {isSubmitting && <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center rounded-lg z-10"><div className="animate-spin h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full mb-3"/><div className="text-sm text-gray-700">Creating project & caching PDFs…</div></div>}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-semibold text-gray-800">New Project</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
@@ -146,10 +133,10 @@ const NewProjectForm: React.FC<NewProjectFormProps> = ({ onClose, onSubmit }) =>
             </button>
             <button
               type="submit"
-              disabled={!projectName || selectedFiles.length === 0}
+              disabled={!projectName || selectedFiles.length === 0 || isSubmitting}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Create Project
+              {isSubmitting ? 'Creating…' : 'Create Project'}
             </button>
           </div>
         </form>

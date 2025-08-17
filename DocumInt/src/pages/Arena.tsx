@@ -51,6 +51,7 @@ const Arena = () => {
     const [chatHistory, setChatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; timestamp: Date; results?: any[] }[]>([
         { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them!', timestamp: new Date() }
     ]);
+    const [isChatOpen, setIsChatOpen] = useState(false);
 
     // Loading state
     const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +59,8 @@ const Arena = () => {
     // PDF list state with persistence
     const [pdfList, setPdfList] = useState<File[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
+    const [isCachingAppend, setIsCachingAppend] = useState(false);
+    const [appendStatus, setAppendStatus] = useState('');
 
     // Storage key for persistence
     const STORAGE_KEY = `arena_pdfs_${projectName}`;
@@ -215,20 +218,122 @@ const Arena = () => {
         // Text highlighting will be implemented in future updates
     };
 
+    // Handle selected text search in chat
+    const handleSelectedTextSearch = async (selectedText: string) => {
+        // Open chat
+        setIsChatOpen(true);
+        
+        // Clear chat history and show only the current search
+        const botMessage = {
+            id: crypto.randomUUID(),
+            type: 'bot' as const,
+            message: `Selected text: "${selectedText}"\n\nSearching for relevant sources...`,
+            timestamp: new Date()
+        };
+        setChatHistory([botMessage]); // Replace entire chat history
+
+        // Query the backend for relevant sources
+        const cacheKey = sessionStorage.getItem('cache_key');
+        if (!cacheKey) {
+            const errorMessage = {
+                id: crypto.randomUUID(),
+                type: 'bot' as const,
+                message: 'PDFs not cached yet. Please upload PDFs first.',
+                timestamp: new Date()
+            };
+            setChatHistory([errorMessage]); // Replace with error message only
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('cache_key', cacheKey);
+            formData.append('task', selectedText);
+            formData.append('k', '5');
+
+            const response = await fetch('http://localhost:8000/query-pdfs', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const resultsMessage = {
+                    id: crypto.randomUUID(),
+                    type: 'bot' as const,
+                    message: `Selected text: "${selectedText}"\n\nFound ${data.subsection_analysis.length} relevant sections:`,
+                    timestamp: new Date(),
+                    results: data.subsection_analysis
+                };
+                setChatHistory([resultsMessage]); // Replace with results only
+            } else {
+                const errorMessage = {
+                    id: crypto.randomUUID(),
+                    type: 'bot' as const,
+                    message: 'Sorry, I encountered an error searching for relevant sources.',
+                    timestamp: new Date()
+                };
+                setChatHistory([errorMessage]); // Replace with error message only
+            }
+        } catch (error) {
+            console.error('Error searching for selected text:', error);
+            const errorMessage = {
+                id: crypto.randomUUID(),
+                type: 'bot' as const,
+                message: 'Sorry, I encountered an error searching for relevant sources.',
+                timestamp: new Date()
+            };
+            setChatHistory([errorMessage]); // Replace with error message only
+        }
+    };
+
     // Add PDF handler
     const handleAddPdf = () => {
         fileInputRef.current?.click();
     };
 
     // File upload handler (add to list)
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const filesInput = event.target.files;
         if (!filesInput?.length) return;
 
         // Convert FileList to Array
         const newFiles = Array.from(filesInput).filter(file => file.type === 'application/pdf');
 
-        setPdfList(prev => addNewFiles(prev, newFiles));
+        // For each new file trigger append endpoint sequentially
+        for (const f of newFiles) {
+            setIsCachingAppend(true);
+            setAppendStatus(`Uploading ${f.name}…`);
+            try {
+                const formData = new FormData();
+                formData.append('project_name', projectName);
+                formData.append('file', f);
+                const resp = await fetch('http://localhost:8000/append-pdf', { method: 'POST', body: formData });
+                if (!resp.ok) { 
+                    console.error('Append failed', await resp.text()); 
+                    continue; 
+                }
+                const data = await resp.json();
+                const key = data.cache_key;
+                setAppendStatus(`Processing embeddings for ${f.name}…`);
+                // Poll cache status
+                for (let i=0;i<180;i++) { // up to ~90s
+                    const statusResp = await fetch(`http://localhost:8000/cache-status/${key}`);
+                    if (statusResp.ok) {
+                        const sData = await statusResp.json();
+                        if (sData.ready) break;
+                    }
+                    await new Promise(r=>setTimeout(r,500));
+                }
+                // On success add to list
+                setPdfList(prev => addNewFiles(prev, [f]));
+            } catch (e) { 
+                console.error('Error appending pdf', e); 
+            } finally { 
+                setIsCachingAppend(false); 
+                setAppendStatus(''); 
+            }
+        }
 
         // If the user selected only one file and it's new, set it as selected
         if (newFiles.length === 1) {
@@ -305,6 +410,7 @@ const Arena = () => {
                 </div>
             ) : (
                 <div className="h-screen bg-gray-50 flex flex-col relative overflow-hidden">
+                    {isCachingAppend && <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex flex-col items-center justify-center"><div className="animate-spin h-14 w-14 border-4 border-blue-600 border-t-transparent rounded-full mb-4"/><div className="text-sm text-gray-700">{appendStatus || 'Updating embeddings…'}</div></div>}
                     {/* Hidden file input */}
                     <input
                         type="file"
@@ -401,11 +507,12 @@ const Arena = () => {
 
                         {/* Selection Bulb Component */}
                         <SelectionBulb 
-                            apis={window.AdobeDC} 
+                            apis={isAdobeLoaded} 
                             onGenerateInsight={(selectedText: string) => {
                                 // This will be called by SelectionBulb to generate insights
                                 console.log('Generating insight for:', selectedText);
                             }}
+                            onSearchInChat={handleSelectedTextSearch}
                         />
 
                         {/* Chat FAB */}
@@ -414,6 +521,8 @@ const Arena = () => {
                             chatMessage={chatMessage}
                             pdfFiles={pdfList}
                             projectName={projectName}
+                            isOpen={isChatOpen}
+                            onToggle={() => setIsChatOpen(prev => !prev)}
                             onMessageChange={setChatMessage}
                             onSendMessage={(message: string, results?: any[]) => {
                                 if (message.trim()) {

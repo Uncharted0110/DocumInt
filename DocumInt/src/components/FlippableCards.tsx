@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FlipHorizontal2 } from 'lucide-react';
+import { FlipHorizontal2, X } from 'lucide-react';
 
 export type FlippableCardItem = {
   id: string;
@@ -24,6 +24,7 @@ interface FlippableCardsProps {
   collapsedHeightClass?: string;
   expandedHeightClass?: string;
   onFlip?: (id: string, flipped: boolean) => void; // NEW
+  onDelete?: (id: string) => void; // NEW: Delete callback
 }
 
 const FlippableCards: React.FC<FlippableCardsProps> = ({
@@ -32,6 +33,7 @@ const FlippableCards: React.FC<FlippableCardsProps> = ({
   collapsedHeightClass = 'h-28',
   expandedHeightClass = 'h-80',
   onFlip,
+  onDelete,
 }) => {
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -96,6 +98,23 @@ const FlippableCards: React.FC<FlippableCardsProps> = ({
               >
                 <FlipHorizontal2 size={14} className={isFlipped ? 'text-indigo-600' : 'text-gray-600'} />
               </button>
+
+              {/* Delete button */}
+              {onDelete && (
+                <button
+                  type="button"
+                  aria-label="Delete insight"
+                  title="Delete insight"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item.id);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  className="absolute right-12 top-2 z-10 px-2 py-1 rounded-md border bg-white/80 hover:bg-red-50 shadow-sm hover:border-red-200"
+                >
+                  <X size={14} className="text-gray-600 hover:text-red-600" />
+                </button>
+              )}
 
               <div
                 className="relative h-full w-full transition-transform duration-500 [transform-style:preserve-3d]"

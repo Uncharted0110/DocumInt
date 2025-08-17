@@ -27,6 +27,8 @@ interface ChatProps {
   onSendMessage: (message: string, results?: QueryResult[]) => void;
   onNavigateToPage?: (page: number) => void;
   projectName?: string;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -37,11 +39,25 @@ const Chat: React.FC<ChatProps> = ({
   onSendMessage,
   onNavigateToPage,
   projectName,
+  isOpen: externalIsOpen,
+  onToggle,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [cacheKey, setCacheKey] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
   const lastSigRef = useRef<string>('');
+
+  // Use external open state if provided, otherwise use internal state
+  const isOpen = externalIsOpen ?? internalIsOpen;
+  
+  const toggleChat = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setInternalIsOpen(prev => !prev);
+    }
+  };
 
   // Cache PDFs when they change (idempotent)
   useEffect(() => {
@@ -56,30 +72,40 @@ const Chat: React.FC<ChatProps> = ({
   const cachePDFs = async () => {
     try {
       setIsProcessing(true);
+      setProcessingStatus('Uploading PDFs…');
       const formData = new FormData();
       if (projectName) formData.append('project_name', projectName);
-      pdfFiles.forEach((file) => {
-        formData.append('files', file);
-      });
+      pdfFiles.forEach((file) => { formData.append('files', file); });
       console.log('[Chat] Calling /cache-pdfs with', pdfFiles.length, 'files for project', projectName);
-      const response = await fetch('http://localhost:8000/cache-pdfs', {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await fetch('http://localhost:8000/cache-pdfs', { method: 'POST', body: formData });
       if (response.ok) {
         const data = await response.json();
         setCacheKey(data.cache_key);
         sessionStorage.setItem('cache_key', data.cache_key);
-        console.log('PDFs cached successfully:', data);
+        setProcessingStatus('Processing embeddings…');
+        // Poll until ready
+        await pollUntilReady(data.cache_key);
       } else {
         const text = await response.text();
         console.error('Failed to cache PDFs', response.status, text);
+        setProcessingStatus('Failed to cache PDFs');
       }
     } catch (error) {
       console.error('Error caching PDFs:', error);
+      setProcessingStatus('Error caching PDFs');
     } finally {
       setIsProcessing(false);
+      setProcessingStatus('');
     }
+  };
+
+  const pollUntilReady = async (key: string) => {
+    for (let i=0; i<120; i++) { // up to ~60s (0.5s * 120)
+      const ready = await checkCacheStatus(key);
+      if (ready) return true;
+      await new Promise(r=> setTimeout(r, 500));
+    }
+    return false;
   };
 
   const checkCacheStatus = async (key: string) => {
@@ -137,7 +163,7 @@ const Chat: React.FC<ChatProps> = ({
     <div>
       {/* Chat Bubble FAB */}
       <button 
-        onClick={() => setIsOpen(o=>!o)} 
+        onClick={toggleChat} 
         className="fixed bottom-4 right-4 z-40 w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition-colors"
         title={isOpen ? "Close chat" : "Open chat"}
       >
@@ -149,7 +175,7 @@ const Chat: React.FC<ChatProps> = ({
         <div className="fixed bottom-24 right-4 z-40 bg-white rounded-lg shadow-2xl border border-gray-200 w-96 h-[560px] flex flex-col">
           <div className="flex items-center justify-between p-3 border-b border-gray-200">
             <div className="font-semibold text-gray-700">Chat Assistant</div>
-            <button onClick={()=>setIsOpen(false)} className="text-gray-500 hover:text-gray-700">
+            <button onClick={toggleChat} className="text-gray-500 hover:text-gray-700">
               <X size={18}/>
             </button>
           </div>
@@ -187,7 +213,7 @@ const Chat: React.FC<ChatProps> = ({
           {/* Chat Input */}
           <div className="p-3 border-t border-gray-200 space-y-2">
             {isProcessing && (
-              <div className="text-xs text-blue-600 mb-2">Processing PDFs...</div>
+              <div className="text-xs text-blue-600 mb-2 flex items-center gap-2"><span className="animate-pulse">{processingStatus || 'Processing PDFs...'}</span></div>
             )}
             <input 
               value={chatMessage} 
