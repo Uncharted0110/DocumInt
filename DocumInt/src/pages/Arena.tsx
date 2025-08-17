@@ -296,10 +296,16 @@ const Arena = () => {
     const handleNavigateToSource = ({ fileName, page, searchText }: { fileName: string; page: number; searchText?: string }) => {
         try {
             if (!fileName) return;
-            const norm = fileName.trim().toLowerCase();
-            const idx = pdfList.findIndex(f => f.name.toLowerCase() === norm || f.name.toLowerCase().endsWith('/' + norm));
+            // Extract just the filename from full path (handle both forward and backward slashes)
+            const baseFileName = fileName.split(/[\\/]/).pop()?.trim().toLowerCase() || '';
+            const idx = pdfList.findIndex(f => {
+                const pdfFileName = f.name.toLowerCase();
+                return pdfFileName === baseFileName || 
+                       baseFileName.includes(pdfFileName) || 
+                       pdfFileName.includes(baseFileName);
+            });
             if (idx === -1) {
-                console.warn('Source PDF not found in current project:', fileName);
+                console.warn('Source PDF not found in current project:', fileName, 'Available PDFs:', pdfList.map(f => f.name));
                 return;
             }
             const target = pdfList[idx];
@@ -543,7 +549,7 @@ const Arena = () => {
                             <>
                                 <DRP id="list" title="PDFs" editable={isFreeLayout} state={p.list} setState={(s)=>setPanels(prev=>prev?{...prev,list:s}:prev)} boundsRef={canvasRef} minW={240} minH={200} highlight={highlightKey==='list'}>
                                     <div className={`glass-panel glass-dark rounded-2xl overflow-hidden w-full h-full gradient-ring sheen ${highlightKey==='list' ? 'focus-flash' : ''}`}> 
-                                        <PDFListSidebar projectName={projectName} files={pdfList} selectedPdf={selectedPdf} onPdfSelect={handlePdfSelection} isMinimized={isSidebarMinimized} onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)} onRemovePdf={handleRemoveSidebarPdf} onBack={() => navigate('/')} />
+                                        <PDFListSidebar projectName={projectName} files={pdfList} selectedPdf={selectedPdf} onPdfSelect={handlePdfSelection} isMinimized={isSidebarMinimized} onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)} onRemovePdf={handleRemoveSidebarPdf} onBack={() => navigate('/projects')} />
                                     </div>
                                 </DRP>
 

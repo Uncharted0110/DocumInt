@@ -24,7 +24,7 @@ const Projects = () => {
   const openProject = async (name: string) => {
     const data = await loadProject(name);
     if (data) {
-      navigate('/arena', { state: { projectName: name, files: data.pdfFiles, persona: data.persona, task: data.task } });
+      navigate('/arena', { state: { projectName: name, files: data.pdfFiles } });
     }
   };
 
@@ -142,9 +142,9 @@ const Projects = () => {
         {showNewProjectForm && (
           <NewProjectForm
             onClose={() => setShowNewProjectForm(false)}
-            onSubmit={(name, files, persona, task) => {
+            onSubmit={(name, files) => {
               setShowNewProjectForm(false);
-              navigate('/arena', { state: { projectName: name, files, persona, task } });
+              navigate('/arena', { state: { projectName: name, files } });
             }}
           />
         )}
