@@ -26,6 +26,7 @@ interface ChatProps {
   onMessageChange: (message: string) => void;
   onSendMessage: (message: string, results?: QueryResult[]) => void;
   onNavigateToPage?: (page: number) => void;
+  onNavigateToSource?: (params: { fileName: string; page: number; searchText?: string }) => void;
   projectName?: string;
   isOpen?: boolean;
   onToggle?: () => void;
@@ -38,6 +39,7 @@ const Chat: React.FC<ChatProps> = ({
   onMessageChange,
   onSendMessage,
   onNavigateToPage,
+  onNavigateToSource,
   projectName,
   isOpen: externalIsOpen,
   onToggle,
@@ -191,7 +193,17 @@ const Chat: React.FC<ChatProps> = ({
                       {m.results.map((r)=> (
                         <button 
                           key={r.document + r.section_title + r.page_number} 
-                          onClick={()=>onNavigateToPage && onNavigateToPage(r.page_number-1)} 
+                          onClick={() => {
+                            if (onNavigateToSource) {
+                              onNavigateToSource({
+                                fileName: r.document,
+                                page: r.page_number,
+                                searchText: r.section_title
+                              });
+                            } else if (onNavigateToPage) {
+                              onNavigateToPage(r.page_number - 1);
+                            }
+                          }}
                           className="w-full text-left bg-white border rounded p-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500" 
                           type="button"
                         >

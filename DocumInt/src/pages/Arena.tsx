@@ -585,6 +585,8 @@ const Arena = () => {
                                         />
                                     </div>
                                 </DRP>
+                            </>
+                        ); })()}
 
                         {/* Selection Bulb Component */}
                         <SelectionBulb 
@@ -619,6 +621,7 @@ const Arena = () => {
                                 }
                             }}
                             onNavigateToPage={handlePageNavigation}
+                            onNavigateToSource={handleNavigateToSource}
                         />
                     </div>
 
