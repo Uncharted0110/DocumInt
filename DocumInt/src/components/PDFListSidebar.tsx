@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, ChevronRight, ChevronLeft, LucideTrash, ArrowLeft } from 'lucide-react';
+import { FileText, ChevronRight, ChevronLeft, LucideTrash, ArrowLeft, Plus } from 'lucide-react';
 
 interface PDFListSidebarProps {
   projectName: string;
@@ -10,6 +10,7 @@ interface PDFListSidebarProps {
   onToggleMinimize: () => void;
   onRemovePdf?: (file: File) => void;
   onBack?: () => void;
+  onAddPdf?: () => void;
 }
 
 const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
@@ -21,6 +22,7 @@ const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
   onToggleMinimize,
   onRemovePdf,
   onBack,
+  onAddPdf,
 }) => {
   return (
     <div
@@ -60,6 +62,25 @@ const PDFListSidebar: React.FC<PDFListSidebarProps> = ({
           )}
         </button>
       </div>
+      
+      {/* Add PDF Button */}
+      {onAddPdf && (
+        <div className="px-4 py-2 border-b border-gray-700">
+          <button
+            onClick={onAddPdf}
+            className="w-full flex items-center justify-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium"
+            title="Add PDF to project"
+          >
+            {!isMinimized && (
+              <>
+                <Plus size={16} className="mr-2" />
+                Add PDF
+              </>
+            )}
+            {isMinimized && <Plus size={20} />}
+          </button>
+        </div>
+      )}
       
       {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">

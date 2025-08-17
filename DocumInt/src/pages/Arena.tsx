@@ -543,7 +543,7 @@ const Arena = () => {
                             <>
                                 <DRP id="list" title="PDFs" editable={isFreeLayout} state={p.list} setState={(s)=>setPanels(prev=>prev?{...prev,list:s}:prev)} boundsRef={canvasRef} minW={240} minH={200} highlight={highlightKey==='list'}>
                                     <div className={`glass-panel glass-dark rounded-2xl overflow-hidden w-full h-full gradient-ring sheen ${highlightKey==='list' ? 'focus-flash' : ''}`}> 
-                                        <PDFListSidebar projectName={projectName} files={pdfList} selectedPdf={selectedPdf} onPdfSelect={handlePdfSelection} isMinimized={isSidebarMinimized} onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)} onRemovePdf={handleRemoveSidebarPdf} onBack={() => navigate('/')} />
+                                        <PDFListSidebar projectName={projectName} files={pdfList} selectedPdf={selectedPdf} onPdfSelect={handlePdfSelection} isMinimized={isSidebarMinimized} onToggleMinimize={() => setIsSidebarMinimized(!isSidebarMinimized)} onRemovePdf={handleRemoveSidebarPdf} onBack={() => navigate('/')} onAddPdf={handleAddPdf} />
                                     </div>
                                 </DRP>
 
