@@ -23,7 +23,7 @@ interface ChatProps {
   chatHistory: ChatMessage[];
   chatMessage: string;
   pdfFiles: File[];
-  onMessageChange: (message: string) => void;
+  onMessageChange: (message: string) => void; // No change needed
   onSendMessage: (message: string, results?: QueryResult[]) => void;
   onNavigateToPage?: (page: number) => void;
   onNavigateToSource?: (params: { fileName: string; page: number; searchText?: string }) => void;
@@ -34,10 +34,10 @@ interface ChatProps {
 
 const Chat: React.FC<ChatProps> = ({
   chatHistory,
-  chatMessage,
+  chatMessage: _chatMessage,
   pdfFiles,
-  onMessageChange,
-  onSendMessage,
+  onMessageChange: _onMessageChange,
+  onSendMessage: _onSendMessage,
   onNavigateToPage,
   onNavigateToSource,
   projectName,
@@ -45,9 +45,8 @@ const Chat: React.FC<ChatProps> = ({
   onToggle,
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
-  const [cacheKey, setCacheKey] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState<string>('');
+  // Removed local cacheKey state; rely on sessionStorage only
+  // Removed visual processing state to avoid unused vars causing TS build failures
   const lastSigRef = useRef<string>('');
 
   // Use external open state if provided, otherwise use internal state
@@ -73,31 +72,25 @@ const Chat: React.FC<ChatProps> = ({
 
   const cachePDFs = async () => {
     try {
-      setIsProcessing(true);
-      setProcessingStatus('Uploading PDFs…');
+  // no-op visual state removed
       const formData = new FormData();
       if (projectName) formData.append('project_name', projectName);
       pdfFiles.forEach((file) => { formData.append('files', file); });
       console.log('[Chat] Calling /cache-pdfs with', pdfFiles.length, 'files for project', projectName);
-      const response = await fetch('http://localhost:8000/cache-pdfs', { method: 'POST', body: formData });
-      if (response.ok) {
+      const response = await fetch('/api/cache-pdfs', { method: 'POST', body: formData });
+  if (response.ok) {
         const data = await response.json();
-        setCacheKey(data.cache_key);
         sessionStorage.setItem('cache_key', data.cache_key);
-        setProcessingStatus('Processing embeddings…');
         // Poll until ready
         await pollUntilReady(data.cache_key);
       } else {
         const text = await response.text();
         console.error('Failed to cache PDFs', response.status, text);
-        setProcessingStatus('Failed to cache PDFs');
       }
     } catch (error) {
       console.error('Error caching PDFs:', error);
-      setProcessingStatus('Error caching PDFs');
     } finally {
-      setIsProcessing(false);
-      setProcessingStatus('');
+  // no-op
     }
   };
 
@@ -112,7 +105,7 @@ const Chat: React.FC<ChatProps> = ({
 
   const checkCacheStatus = async (key: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/cache-status/${key}`);
+  const response = await fetch(`/api/cache-status/${key}`);
       if (response.ok) {
         const data = await response.json();
         return data.ready;
@@ -123,42 +116,7 @@ const Chat: React.FC<ChatProps> = ({
     return false;
   };
 
-  const handleSendMessage = async () => {
-    if (!chatMessage.trim() || !cacheKey) return;
-    onSendMessage(chatMessage);
-
-    // Check if cache is ready
-    const isReady = await checkCacheStatus(cacheKey);
-    if (!isReady) {
-      onSendMessage('PDFs are still being processed. Please wait a moment and try again.');
-      return;
-    }
-
-    try {
-      // Query the backend
-      const formData = new FormData();
-      formData.append('cache_key', cacheKey);
-      formData.append('task', chatMessage);
-      formData.append('k', '5');
-
-      const response = await fetch('http://localhost:8000/query-pdfs', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Send bot response with results
-        const botMessage = `Found ${data.subsection_analysis.length} relevant sections from your PDFs.`;
-        onSendMessage(botMessage, data.subsection_analysis);
-      } else {
-        onSendMessage('Sorry, I encountered an error processing your query. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error querying PDFs:', error);
-      onSendMessage('Sorry, I encountered an error processing your query. Please try again.');
-    }
-  };
+  // Removed unused handleSendMessage to satisfy noUnusedLocals
 
   return (
     <div>

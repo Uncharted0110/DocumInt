@@ -85,7 +85,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8000/extract-outline', {
+  const response = await fetch('/api/extract-outline', {
         method: 'POST',
         body: formData,
       });

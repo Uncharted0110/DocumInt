@@ -407,7 +407,7 @@ const Arena = () => {
     };
 
     // Highlight after navigation complete
-    const handleNavigationComplete = (page: number) => {
+    const handleNavigationComplete = (_page: number) => {
         const sectionTitle = lastSearchTextRef.current;
         if (!sectionTitle) return;
         const adobeApis = (window as any).__ADOBE_APIS__;
@@ -477,7 +477,7 @@ const Arena = () => {
             formData.append('task', selectedText);
             formData.append('k', '5');
 
-            const response = await fetch('http://localhost:8000/query-pdfs', {
+            const response = await fetch('/api/query-pdfs', {
                 method: 'POST',
                 body: formData,
             });
@@ -534,7 +534,7 @@ const Arena = () => {
                 const formData = new FormData();
                 formData.append('project_name', projectName);
                 formData.append('file', f);
-                const resp = await fetch('http://localhost:8000/append-pdf', { method: 'POST', body: formData });
+                const resp = await fetch('/api/append-pdf', { method: 'POST', body: formData });
                 if (!resp.ok) { 
                     console.error('Append failed', await resp.text()); 
                     continue; 
@@ -544,7 +544,7 @@ const Arena = () => {
                 setAppendStatus(`Processing embeddings for ${f.name}…`);
                 // Poll cache status
                 for (let i=0;i<180;i++) { // up to ~90s
-                    const statusResp = await fetch(`http://localhost:8000/cache-status/${key}`);
+                    const statusResp = await fetch(`/api/cache-status/${key}`);
                     if (statusResp.ok) {
                         const sData = await statusResp.json();
                         if (sData.ready) break;
