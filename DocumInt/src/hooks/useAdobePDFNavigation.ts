@@ -283,6 +283,7 @@ export const useAdobePDFNavigation = ({ view, viewer, apis, containerRef, docVer
           await Promise.resolve(a.gotoLocation(targetPage));
           if (await verifyNavigation(targetPage)) {
             console.log(`Successfully navigated to page ${targetPage} via gotoLocation(number)`);
+            window.dispatchEvent(new CustomEvent('pdf-navigation-complete', { detail: { page: targetPage } }));
             return true;
           }
         } catch {}

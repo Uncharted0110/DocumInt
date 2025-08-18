@@ -148,7 +148,6 @@ const Chat: React.FC<ChatProps> = ({
 
       if (response.ok) {
         const data = await response.json();
-        
         // Send bot response with results
         const botMessage = `Found ${data.subsection_analysis.length} relevant sections from your PDFs.`;
         onSendMessage(botMessage, data.subsection_analysis);
@@ -198,7 +197,7 @@ const Chat: React.FC<ChatProps> = ({
                               onNavigateToSource({
                                 fileName: r.document,
                                 page: r.page_number,
-                                searchText: r.section_title
+                                searchText: r.section_title // highlight section title after navigation
                               });
                             } else if (onNavigateToPage) {
                               onNavigateToPage(r.page_number - 1);

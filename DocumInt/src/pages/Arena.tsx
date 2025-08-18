@@ -371,16 +371,16 @@ const Arena = () => {
     };
 
     // Navigate to a source across PDFs from Insights
+    // Store last searchText for highlight after navigation
+    const lastSearchTextRef = useRef<string | undefined>(undefined);
+
     const handleNavigateToSource = ({ fileName, page, searchText }: { fileName: string; page: number; searchText?: string }) => {
         try {
             if (!fileName) return;
-            // Extract just the filename from full path (handle both forward and backward slashes)
             const baseFileName = fileName.split(/[\\/]/).pop()?.trim().toLowerCase() || '';
             const idx = pdfList.findIndex(f => {
                 const pdfFileName = f.name.toLowerCase();
-                return pdfFileName === baseFileName || 
-                       baseFileName.includes(pdfFileName) || 
-                       pdfFileName.includes(baseFileName);
+                return pdfFileName === baseFileName || baseFileName.includes(pdfFileName) || pdfFileName.includes(baseFileName);
             });
             if (idx === -1) {
                 console.warn('Source PDF not found in current project:', fileName, 'Available PDFs:', pdfList.map(f => f.name));
@@ -388,23 +388,60 @@ const Arena = () => {
             }
             const target = pdfList[idx];
             const goTo = Math.max(0, (Number(page) || 1) - 1);
-            // If this PDF is not selected, switch then navigate after a short delay
+            const doNav = () => setNavigationPage(goTo);
             if (!selectedPdf || selectedPdf.name !== target.name) {
                 setSelectedPdf(target);
                 setPdfFileName(target.name);
                 const url = pdfUrls[idx];
                 if (url) setPdfUrl(url);
-                // Defer navigation a bit to allow viewer to mount the new PDF
-                window.setTimeout(() => setNavigationPage(goTo), 300);
+                window.setTimeout(doNav, 300);
             } else {
-                setNavigationPage(goTo);
+                doNav();
             }
             if (searchText) {
-                // In future we can emit a highlight event using Adobe APIs with searchText
+                lastSearchTextRef.current = searchText;
             }
         } catch (e) {
             console.debug('Failed to navigate to source', e);
         }
+    };
+
+    // Highlight after navigation complete
+    const handleNavigationComplete = (page: number) => {
+        const sectionTitle = lastSearchTextRef.current;
+        if (!sectionTitle) return;
+        const adobeApis = (window as any).__ADOBE_APIS__;
+        (async () => {
+            if (!sectionTitle.trim()) return;
+            try {
+                if (!adobeApis || typeof adobeApis.search !== 'function') {
+                    console.warn('Adobe APIs not ready for highlighting');
+                    return;
+                }
+                const fullTitle = sectionTitle.trim();
+                const words = fullTitle.split(/\s+/);
+                const firstTwo = words.slice(0, 2).join(' ');
+                console.log('[Highlight] Trying full section title:', fullTitle);
+                let result = await adobeApis.search(fullTitle);
+                const empty = !result || (Array.isArray(result) && result.length === 0);
+                if (empty && words.length > 2) {
+                    console.log('[Highlight] Full title not found, trying first 2 words:', firstTwo);
+                    result = await adobeApis.search(firstTwo);
+                }
+                if ((!result || (Array.isArray(result) && result.length === 0)) && words.length >= 1) {
+                    for (const w of words.slice(0, 3)) { // try up to first 3 meaningful words
+                        if (w.length < 3) continue;
+                        try {
+                            console.log('[Highlight] Fallback single word search:', w);
+                            const r = await adobeApis.search(w);
+                            if (r && (!Array.isArray(r) || r.length > 0)) break;
+                        } catch {}
+                    }
+                }
+            } catch (err) {
+                console.error('Highlight attempt failed:', err);
+            }
+        })();
     };
 
     // Handle selected text search in chat
@@ -655,7 +692,7 @@ const Arena = () => {
                                                 <ChevronRight size={20} />
                                             </button>
                                         )}
-                                        <PDFViewer pdfFile={selectedPdf} pdfUrl={pdfUrl} pdfFileName={pdfFileName} isAdobeLoaded={isAdobeLoaded} onFileUpload={handleAddPdf} navigationPage={navigationPage} />
+                                        <PDFViewer pdfFile={selectedPdf} pdfUrl={pdfUrl} pdfFileName={pdfFileName} isAdobeLoaded={isAdobeLoaded} onFileUpload={handleAddPdf} navigationPage={navigationPage} onNavigationComplete={handleNavigationComplete} />
                                     </div>
                                 </DRP>
 

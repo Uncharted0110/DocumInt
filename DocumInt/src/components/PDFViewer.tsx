@@ -9,6 +9,7 @@ interface PDFViewerProps {
   isAdobeLoaded: boolean;
   onFileUpload: () => void;
   navigationPage?: number;
+  onNavigationComplete?: (page: number) => void;
 }
 
 const PDFViewer: React.FC<PDFViewerProps> = ({
@@ -17,7 +18,8 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   pdfFileName,
   isAdobeLoaded,
   onFileUpload,
-  navigationPage
+  navigationPage,
+  onNavigationComplete
 }) => {
   const [view, setView] = useState<any>(null);
   const [viewer, setViewer] = useState<any>(null);
@@ -75,8 +77,16 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
       lastNavigationPageRef.current = navigationPage;
       // Call immediately; hook will queue if not ready yet
       navigateToPage(navigationPage);
+      // Listen for navigation complete event
+      const handler = (e: any) => {
+        if (e?.detail?.page === navigationPage + 1 && onNavigationComplete) {
+          onNavigationComplete(navigationPage);
+        }
+      };
+      window.addEventListener('pdf-navigation-complete', handler);
+      return () => window.removeEventListener('pdf-navigation-complete', handler);
     }
-  }, [viewer, navigationPage, navigateToPage]);
+  }, [viewer, navigationPage, navigateToPage, onNavigationComplete]);
 
   const initializePDFViewer = () => {
     if (!window.AdobeDC || !pdfViewerRef.current) return;
