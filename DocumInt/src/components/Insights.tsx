@@ -209,21 +209,6 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
             </ul>
           </div>
         )}
-        {details.length>0 && (
-          <div className="space-y-2">
-            {details.slice(0,3).map((d,i)=>{
-              const key=`det_${i}`;
-              return (
-                <div key={key} className="border rounded p-2 bg-gray-50">
-                  <div className="text-[11px] text-gray-500 mb-1">{d.document} • {d.section_title} (p.{d.page_number})</div>
-                  <div className="prose prose-xs prose-slate max-w-none [&>*]:my-1 [&>h1]:text-xs [&>h2]:text-xs [&>h3]:text-xs [&>p]:text-xs [&>li]:text-xs [&>strong]:font-semibold">
-                    <ReactMarkdown>{(d.gemini_analysis||'').slice(0,800)}</ReactMarkdown>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
     );
   }, [onNavigateToPage, onNavigateToSource, buildMindmap]);
