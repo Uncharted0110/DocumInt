@@ -23,8 +23,6 @@ interface ChatProps {
   chatHistory: ChatMessage[];
   chatMessage: string;
   pdfFiles: File[];
-  onMessageChange: (message: string) => void;
-  onSendMessage: (message: string, results?: QueryResult[]) => void;
   onNavigateToPage?: (page: number) => void;
   onNavigateToSource?: (params: { fileName: string; page: number; searchText?: string }) => void;
   projectName?: string;
@@ -34,10 +32,7 @@ interface ChatProps {
 
 const Chat: React.FC<ChatProps> = ({
   chatHistory,
-  chatMessage,
   pdfFiles,
-  onMessageChange,
-  onSendMessage,
   onNavigateToPage,
   onNavigateToSource,
   projectName,
@@ -45,9 +40,9 @@ const Chat: React.FC<ChatProps> = ({
   onToggle,
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
-  const [cacheKey, setCacheKey] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState<string>('');
+  const [, setCacheKey] = useState<string | null>(null);
+  const [, setIsProcessing] = useState(false);
+  const [, setProcessingStatus] = useState<string>('');
   const lastSigRef = useRef<string>('');
 
   // Use external open state if provided, otherwise use internal state
@@ -121,43 +116,6 @@ const Chat: React.FC<ChatProps> = ({
       console.error('Error checking cache status:', error);
     }
     return false;
-  };
-
-  const handleSendMessage = async () => {
-    if (!chatMessage.trim() || !cacheKey) return;
-    onSendMessage(chatMessage);
-
-    // Check if cache is ready
-    const isReady = await checkCacheStatus(cacheKey);
-    if (!isReady) {
-      onSendMessage('PDFs are still being processed. Please wait a moment and try again.');
-      return;
-    }
-
-    try {
-      // Query the backend
-      const formData = new FormData();
-      formData.append('cache_key', cacheKey);
-      formData.append('task', chatMessage);
-      formData.append('k', '5');
-
-      const response = await fetch('http://localhost:8000/query-pdfs', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Send bot response with results
-        const botMessage = `Found ${data.subsection_analysis.length} relevant sections from your PDFs.`;
-        onSendMessage(botMessage, data.subsection_analysis);
-      } else {
-        onSendMessage('Sorry, I encountered an error processing your query. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error querying PDFs:', error);
-      onSendMessage('Sorry, I encountered an error processing your query. Please try again.');
-    }
   };
 
   return (

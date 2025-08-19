@@ -36,13 +36,13 @@ RUN pip install --no-cache-dir torch==2.0.1+cpu torchvision==0.15.2+cpu torchaud
 # Expose envs (documented)
 # Set non-sensitive environment variables; sensitive ones must be provided at runtime
 ENV DOCUMINT_FRONTEND_DIST=/app/web/dist \
-    ADOBE_EMBED_API_KEY="" \
+    VITE_ADOBE_API_KEY="" \
     LLM_PROVIDER=gemini \
-    GOOGLE_APPLICATION_CREDENTIALS=/credentials/adbe-gcp.json \
+    VITE_GEMINI_API_KEY="" \
     GEMINI_MODEL=gemini-2.5-flash \
     TTS_PROVIDER=azure \
-    AZURE_TTS_KEY="" \
-    AZURE_TTS_ENDPOINT=""
+    SPEECH_API_KEY="" \
+    SPEECH_REGION=""
 
 # Copy ASGI server that mounts frontend + backend
 COPY Backend/app.py /app/backend/server.py

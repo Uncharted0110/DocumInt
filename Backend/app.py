@@ -69,8 +69,8 @@ CHUNKS_FILENAME = "chunks.json"
 
 # Constants
 GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash'
-HOST_A = 'Host A'
-HOST_B = 'Host B'
+HOST_A = 'Host'
+HOST_B = 'Host B'  # retained for backward compatibility but unused in single-host mode
 
 # ---------------- Persistence Helpers -----------------
 
@@ -627,10 +627,10 @@ AGGREGATED SECTIONS END
                         "index": i,
                         "document": ch.get('pdf_name','Unknown'),
                         "section_title": ch.get('heading', NO_HEADING),
-                        "page_number": ch.get('page_number',1),
-                        "hybrid_score": ch.get('hybrid_score',0),
-                        "bm25_score": ch.get('bm25_score',0),
-                        "embedding_score": ch.get('embedding_score',0)
+                        "page_number": ch.get('page_number', 1),
+                        "hybrid_score": ch.get('hybrid_score', 0),
+                        "bm25_score": ch.get('bm25_score', 0),
+                        "embedding_score": ch.get('embedding_score', 0)
                     } for i, ch in enumerate(combined)
                 ],
                 "gemini_analysis": gemini_text,
@@ -795,7 +795,7 @@ class PodcastifyRequest(BaseModel):
     style: Optional[str] = "engaging, educational, conversational"
     audience: Optional[str] = "general technical audience"
     duration_hint: Optional[str] = "3-5 minutes"
-    host_names: Optional[List[str]] = [HOST_A, HOST_B]
+    host_name: Optional[str] = HOST_A  # single host now
 
 @app.post("/podcastify-analysis")
 async def podcastify_analysis(req: PodcastifyRequest):
@@ -815,20 +815,18 @@ async def podcastify_analysis(req: PodcastifyRequest):
         insights = ((req.analysis or {}).get("summary", {}) or {}).get("top_insights", []) or []
         insights = insights[:6]
 
-        hosts = (req.host_names or [HOST_A, HOST_B])
-        if len(hosts) < 2:
-            hosts = [HOST_A, HOST_B]
+        host = req.host_name or HOST_A
 
-        # Build a podcast-style prompt
+        # Build a podcast-style prompt (single host narrative)
         prompt = f"""
-You are a scriptwriter creating a short podcast conversation.
+You are a scriptwriter creating a short narrated podcast style monologue (single host).
 
 Constraints:
 - Style: {req.style}
 - Audience: {req.audience}
 - Duration: {req.duration_hint}
-- Speakers: {hosts[0]} and {hosts[1]}
-- Avoid hallucinations. Use only provided material. Cite document and section casually when relevant.
+- Speaker: {host}
+- Avoid hallucinations. Use only provided material. Cite document and section/page naturally when relevant.
 
 Context:
 - Persona: {persona}
@@ -842,20 +840,18 @@ Key Retrieval Results (document • section • page):
 {chr(10).join(f"- {r.get('document','Unknown')} • {r.get('section_title','No section')} • p.{r.get('page_number',1)}" for r in retrieval) if retrieval else "- (none)"}
 
 Analysis Excerpts:
-{chr(10).join(f"- {a.get('document','Unknown')} • {a.get('section_title','No section')} (p.{a.get('page_number',1)}): { (a.get('gemini_analysis') or '')[:800] }" for a in analyses) if analyses else "- (none)"}
+{chr(10).join(f"- { (a.get('gemini_analysis') or '')[:600] }" for a in analyses) if analyses else "- (none)"}
 
 Task:
-Write a podcast script with:
-1) A concise intro hook (1–2 lines).
-2) A back-and-forth discussion that explains the most important insights clearly, using natural conversational turns.
-3) Occasional references to documents/sections (e.g., “in the API Guide, section 3, page 12”).
-4) A brief wrap-up with next steps.
+Write a narrated script with:
+1) A concise hook (1–2 lines).
+2) Clear explanation of the most important insights, grouped logically.
+3) Occasional references to documents/sections/pages (e.g., "in the API Guide, section 3, page 12").
+4) A brief wrap-up with actionable next steps.
 
 Output format (plain text):
 Title: <compelling title>
-{hosts[0]}: <line>
-{hosts[1]}: <line>
-... (alternate clearly)
+{host}: <narration paragraphs; each line or short paragraph prefixed once with the host name is fine>
 """
 
         script = await call_gemini_api(
@@ -870,7 +866,7 @@ Title: <compelling title>
                 "job_to_be_done": job,
                 "domain": domain,
                 "used_model": req.gemini_model or GEMINI_DEFAULT_MODEL,
-                "host_names": hosts
+                "host_name": host
             },
             "podcast_script": script
         }
@@ -992,7 +988,7 @@ async def generate_podcast(req: GeneratePodcastRequest):
             script_cached = await sf.read()
         return {"insight_id": req.insight_id, "audio_url": f"/insight-audio/{project}/{req.insight_id}.mp3", "script": script_cached, "cached": True}
 
-    # Build script (reuse podcastify logic inline)
+    # Build script (single host prompt)
     try:
         retrieval = (analysis.get("retrieval_results") or [])[:5]
         analyses = [a for a in (analysis.get("gemini_analysis") or []) if not a.get("error")] [:3]
@@ -1001,14 +997,14 @@ async def generate_podcast(req: GeneratePodcastRequest):
         persona = meta.get("persona", "Unknown Persona")
         job = meta.get("job_to_be_done", "Unknown Task")
         domain = meta.get("domain", "general")
-        hosts = [HOST_A, HOST_B]
+        host = HOST_A
         prompt = f"""
-You are a scriptwriter creating a short podcast conversation.
+You are a scriptwriter creating a short narrated podcast style monologue (single host).
 Constraints:
 - Style: engaging, educational, conversational
 - Audience: general technical audience
 - Duration: 3-5 minutes
-- Speakers: {hosts[0]} and {hosts[1]}
+- Speaker: {host}
 - Avoid hallucinations. Use only provided material. Cite document and section casually when relevant.
 Context:
 - Persona: {persona}
@@ -1019,18 +1015,16 @@ Top Insights:
 Key Retrieval Results (document • section • page):
 {chr(10).join(f"- {r.get('document','Unknown')} • {r.get('section_title','No section')} • p.{r.get('page_number',1)}" for r in retrieval) if retrieval else "- (none)"}
 Analysis Excerpts:
-{chr(10).join(f"- {a.get('document','Unknown')} • {a.get('section_title','No section')} (p.{a.get('page_number',1)}): {(a.get('gemini_analysis') or '')[:600]}" for a in analyses) if analyses else "- (none)"}
+{chr(10).join(f"- {(a.get('gemini_analysis') or '')[:600]}" for a in analyses) if analyses else "- (none)"}
 Task:
-Write a podcast script with:
+Write a script with:
 1) A concise intro hook (1–2 lines).
-2) A back-and-forth discussion that explains the most important insights clearly, using natural conversational turns.
-3) Occasional references to documents/sections.
+2) A cohesive narrative explaining the most important insights.
+3) Occasional references to documents/sections/pages.
 4) A brief wrap-up with next steps.
 Output format (plain text):
 Title: <compelling title>
-{hosts[0]}: <line>
-{hosts[1]}: <line>
-... (alternate clearly)
+{host}: <narration paragraphs>
 """
         script = await call_gemini_api(
             prompt=prompt,
@@ -1070,9 +1064,9 @@ Title: <compelling title>
         "audio_url": f"/insight-audio/{project}/{req.insight_id}.mp3" if audio_path.exists() else None,
         "script": script_path.read_text(encoding='utf-8'),
         "cached": False,
-        "regenerated": req.regenerate
+        "regenerated": req.regenerate,
+        "host_name": HOST_A
     }
-
 @app.get("/insight-audio/{project_name}/{insight_id}.mp3")
 async def get_insight_audio(project_name: str, insight_id: str):
     project = _safe_project_name(project_name)

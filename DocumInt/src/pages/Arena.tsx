@@ -47,7 +47,7 @@ const Arena = () => {
     const [navigationPage, setNavigationPage] = useState<number | undefined>(undefined);
 
     // Chat state - simplified interface
-    const [chatMessage, setChatMessage] = useState('');
+    const [chatMessage, ] = useState('');
     const [chatHistory, setChatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; timestamp: Date; results?: any[] }[]>([
         { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them!', timestamp: new Date() }
     ]);
@@ -407,7 +407,7 @@ const Arena = () => {
     };
 
     // Highlight after navigation complete
-    const handleNavigationComplete = (page: number) => {
+    const handleNavigationComplete = () => {
         const sectionTitle = lastSearchTextRef.current;
         if (!sectionTitle) return;
         const adobeApis = (window as any).__ADOBE_APIS__;
@@ -727,20 +727,6 @@ const Arena = () => {
                             projectName={projectName}
                             isOpen={isChatOpen}
                             onToggle={() => setIsChatOpen(prev => !prev)}
-                            onMessageChange={setChatMessage}
-                            onSendMessage={(message: string, results?: any[]) => {
-                                if (message.trim()) {
-                                    const newMessage = {
-                                        id: crypto.randomUUID(),
-                                        type: 'user' as const,
-                                        message,
-                                        timestamp: new Date(),
-                                        results
-                                    };
-                                    setChatHistory(prev => [...prev, newMessage]);
-                                    setChatMessage('');
-                                }
-                            }}
                             onNavigateToPage={handlePageNavigation}
                             onNavigateToSource={handleNavigateToSource}
                         />
@@ -762,20 +748,20 @@ const Arena = () => {
             )}
             {/* Edit Layout toggle + Reset (visible in edit mode) */}
             {!isMindmapVisible && (
-                <div className="fixed top-3 right-3 z-[60] flex items-center gap-2">
-                    {isFreeLayout && (
-                        <button
-                            className="px-3 py-1.5 rounded-full chip-neo hover-lift text-sm"
-                            onClick={resetToDefaults}
-                            title="Reset layout to defaults"
-                        >
-                            Reset layout
-                        </button>
-                    )}
-                    <button className="px-3 py-1.5 rounded-full btn-neo hover-lift text-sm flex items-center gap-2" onClick={() => setIsFreeLayout(v=>!v)} title="Toggle free layout">
-                        <Move size={16} /> {isFreeLayout ? 'Exit layout' : 'Edit layout'}
+            <div className="fixed top-3 right-3 z-[60] flex items-center gap-2">
+                {isFreeLayout && (
+                    <button
+                        className="px-3 py-1.5 rounded-full chip-neo hover-lift text-sm"
+                        onClick={resetToDefaults}
+                        title="Reset layout to defaults"
+                    >
+                        Reset layout
                     </button>
-                </div>
+                )}
+                <button className="px-3 py-1.5 rounded-full btn-neo hover-lift text-sm flex items-center gap-2" onClick={() => setIsFreeLayout(v=>!v)} title="Toggle free layout">
+                    <Move size={16} /> {isFreeLayout ? 'Exit layout' : 'Edit layout'}
+                </button>
+            </div>
             )}
         </>
     );
