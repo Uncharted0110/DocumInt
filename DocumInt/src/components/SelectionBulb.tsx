@@ -13,6 +13,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSearchingChat, setIsSearchingChat] = useState(false);
   const [, setError] = useState<string | null>(null);
+  const [bulbPosition, setBulbPosition] = useState({ x: 0, y: 0 });
 
   // Helper to extract text from selection response
   const extractText = (selection: any): string => {
@@ -41,6 +42,38 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
   const getBrowserSelection = (): string => {
     const selection = window.getSelection();
     return selection?.toString().trim() || '';
+  };
+
+  // Helper to get selection position
+  const getSelectionPosition = () => {
+    // Try to get browser selection position first
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        return {
+          x: rect.right + window.scrollX + 8, // 8px offset from selection end
+          y: rect.top + window.scrollY - 8   // 8px above selection
+        };
+      }
+    }
+    
+    // Fallback to Adobe PDF viewer area if available
+    const pdfViewer = document.querySelector('[data-pdfviewer="true"], .pdf-viewer, #adobe-dc-view');
+    if (pdfViewer) {
+      const rect = pdfViewer.getBoundingClientRect();
+      return {
+        x: rect.right - 60,  // Near right edge of PDF viewer
+        y: rect.top + 20     // Near top of PDF viewer
+      };
+    }
+    
+    // Final fallback to center of screen
+    return { 
+      x: window.innerWidth / 2, 
+      y: window.innerHeight / 2 
+    };
   };
 
   // Effect to ensure bulb is hidden when no text is selected
@@ -73,6 +106,8 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
           if (trimmedText !== selectedText && !isSearchingChat && !isGenerating) {
             setSelectedText(trimmedText);
             setIsVisible(true);
+            // Update bulb position to selection end
+            setBulbPosition(getSelectionPosition());
             // Automatically trigger chat search
             handleSearchInChat(trimmedText);
           }
@@ -169,9 +204,11 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
       <button
         onClick={triggerBackendInsight}
         disabled={!selectedText || isGenerating || isSearchingChat}
-        className={`fixed top-1 right-85 z-[2147483647] w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
+        className={`fixed z-[2147483647] w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
         title={buttonTitle}
         style={{
+          left: `${bulbPosition.x}px`,
+          top: `${bulbPosition.y}px`,
           boxShadow: isVisible && !isGenerating && !isSearchingChat ? '0 0 20px rgba(255, 193, 7, 0.6), 0 0 40px rgba(255, 193, 7, 0.4)' : undefined
         }}
       >

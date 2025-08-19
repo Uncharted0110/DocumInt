@@ -162,7 +162,6 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
   const buildFrontExpanded = useCallback((_selected: string, analysis: GeminiAnalysisResp) => {
     const top = analysis.summary?.top_insights || [];
     const retrieval = analysis.retrieval_results || [];
-    const details = (analysis.gemini_analysis || []).filter(a=>!a.error);
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-indigo-700 font-semibold text-sm"><Sparkles size={14}/> Generated Insight</div>
