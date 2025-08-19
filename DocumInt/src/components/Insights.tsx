@@ -3,7 +3,6 @@ import { Lightbulb, Loader2, Sparkles } from 'lucide-react';
 import FlippableCards, { type FlippableCardItem } from './FlippableCards';
 import { updateProjectInsights, type ProjectInsightPersist } from '../utils/projectStorage';
 import { useMindmap } from '../contexts/MindmapContext';
-import ReactMarkdown from 'react-markdown';
 
 interface GeminiAnalysisResp { metadata?: any; retrieval_results?: any[]; gemini_analysis?: any[]; summary?: { top_insights?: string[] }; selected_text?: string; insight_id?: string; }
 interface InsightsProps {
@@ -258,10 +257,12 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
   );
 
   return (
-    <div className="w-full">
-      <div className="mb-2 flex items-center justify-between"><div className="font-semibold text-gray-700 flex items-center gap-2"><Lightbulb size={16}/> Insights</div><div className="text-xs text-gray-500">{items.length} total</div></div>
-      {items.length===0 && <div className="p-4 border rounded bg-white text-xs text-gray-600">Select text and Generate Insight using the bulb.</div>}
-      <FlippableCards items={items} collapsedHeightClass="h-32" expandedHeightClass="h-[430px]" onFlip={handleFlip} onDelete={handleDelete} />
+    <div className="w-full h-full flex flex-col">
+      <div className="mb-2 flex items-center justify-between flex-shrink-0"><div className="font-semibold text-gray-700 flex items-center gap-2"><Lightbulb size={16}/> Insights</div><div className="text-xs text-gray-500">{items.length} total</div></div>
+      {items.length===0 && <div className="p-4 border rounded bg-white text-xs text-gray-600 flex-shrink-0">Select text and Generate Insight using the bulb.</div>}
+      <div className="flex-1 overflow-y-auto">
+        <FlippableCards items={items} collapsedHeightClass="h-32" expandedHeightClass="h-[430px]" onFlip={handleFlip} onDelete={handleDelete} />
+      </div>
     </div>
   );
 };

@@ -4,6 +4,8 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useLocation } from 'react-router-dom';
 import { useMindmap } from '../contexts/MindmapContext';
+import { AnimatedBackground } from './background';
+import { ArrowLeft, Download, FileText } from 'lucide-react';
 
 // Spacing & animation knobs
 const V_SPACING = 90; // vertical spacing between rows
@@ -56,10 +58,6 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
   ]);
 
   const [links, setLinks] = useState<Link[]>([]);
-
-  const [newLabel, setNewLabel] = useState("");
-  const [parentId, setParentId] = useState("1");
-  const [isControlsMinimized, setIsControlsMinimized] = useState(false);
 
   // Allow manual positioning (screen-space offsets) per node id
   const [positionOverrides, setPositionOverrides] = useState<Record<string, { dx: number; dy: number }>>({});
@@ -448,17 +446,6 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
     }
   }, [insightsData]);
 
-  // Zoom controls
-  const zoomIn = useCallback(() => {
-    if (!svgRef.current || !zoomBehaviorRef.current) return;
-    d3.select(svgRef.current).transition().duration(200).call(zoomBehaviorRef.current.scaleBy as any, 1.2);
-  }, []);
-
-  const zoomOut = useCallback(() => {
-    if (!svgRef.current || !zoomBehaviorRef.current) return;
-    d3.select(svgRef.current).transition().duration(200).call(zoomBehaviorRef.current.scaleBy as any, 1 / 1.2);
-  }, []);
-
   const centerOnRoot = useCallback(() => {
     if (!svgRef.current || !containerRef.current || !zoomBehaviorRef.current) return;
     const { clientWidth, clientHeight } = containerRef.current;
@@ -468,20 +455,6 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
     const t = d3.zoomIdentity.translate(width / 2 - rootPos.x, height / 2 - rootPos.y).scale(1);
     d3.select(svgRef.current).transition().duration(250).call(zoomBehaviorRef.current.transform as any, t);
   }, []);
-
-  // Add node under selected parent
-  const addNode = useCallback(() => {
-    const label = newLabel.trim();
-    if (!label) return;
-
-    const colors = ["#ff9999", "#99ccff", "#99ff99", "#ffcc99", "#d1b3ff", "#ffb3ba", "#bae1ff", "#bfddac"];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const newId = (nodes.length + 1).toString();
-
-    setNodes((prev) => [...prev, { id: newId, label, x: 0, y: 0, color }]);
-    setLinks((prev) => [...prev, { id: `e${parentId}-${newId}`, source: parentId, target: newId }]);
-    setNewLabel("");
-  }, [newLabel, parentId, nodes.length]);
 
   const exportToPNG = async () => {
     if (!containerRef.current) return;
@@ -505,131 +478,110 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
 
   return (
     <div style={{ width: "100%", height: "100vh", position: "relative" }}>
-      {/* Controls (restyled) */}
-      <div
+      {/* Close button - transparent left arrow at top left */}
+      <button
+        onClick={onClose}
         style={{
           position: "absolute",
-          top: 12,
-          left: 12,
+          top: 20,
+          left: 20,
           zIndex: 10,
-          background: "#ffffff",
-          padding: "16px",
-          borderRadius: "12px",
-          boxShadow: "0 10px 20px rgba(0,0,0,0.15)",
+          background: "rgba(255,255,255,0.1)",
+          border: "1px solid rgba(255,255,255,0.2)",
+          borderRadius: "50%",
+          width: 48,
+          height: 48,
           display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-          minWidth: isControlsMinimized ? "auto" : "280px",
-          maxWidth: isControlsMinimized ? "60px" : "300px",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
           transition: "all 0.3s ease",
+          backdropFilter: "blur(10px)",
         }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(255,255,255,0.2)";
+          e.currentTarget.style.transform = "scale(1.1)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+          e.currentTarget.style.transform = "scale(1)";
+        }}
+        title="Close Mind Map"
       >
-        {/* Toggle */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          {!isControlsMinimized && (
-            <span style={{ fontSize: "14px", fontWeight: 700, color: "#1f2937" }}>Mind Map Controls</span>
-          )}
-          <button
-            onClick={() => setIsControlsMinimized(!isControlsMinimized)}
-            style={{
-              background: "#f3f4f6",
-              border: "1px solid #e5e7eb",
-              borderRadius: "6px",
-              cursor: "pointer",
-              padding: "4px 8px",
-              fontSize: "12px",
-              color: "#374151",
-            }}
-          >
-            {isControlsMinimized ? "⚙️" : "−"}
-          </button>
-        </div>
+        <ArrowLeft size={20} color="rgba(255,255,255,0.8)" />
+      </button>
 
-        {!isControlsMinimized && (
-          <>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: -4 }}>Add New Node</div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="text"
-                placeholder="Enter node content..."
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addNode()}
-                style={{ padding: 10, border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, flex: 1, outline: "none" }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <select
-                value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-                style={{ padding: 10, border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12, flex: 1 }}
-              >
-                {nodes.map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {n.label.length > 20 ? n.label.substring(0, 20) + "..." : n.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={addNode}
-              disabled={!newLabel.trim()}
-              style={{
-                padding: "10px 12px",
-                background: newLabel.trim() ? "#6b7280" : "#e5e7eb",
-                color: newLabel.trim() ? "#ffffff" : "#9ca3af",
-                border: "none",
-                borderRadius: 8,
-                cursor: newLabel.trim() ? "pointer" : "not-allowed",
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              + Add Node
-            </button>
-
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Export Options</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={exportToPNG} style={{ padding: "8px 12px", background: "#22c55e", color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
-                🖼️ PNG
-              </button>
-              <button onClick={exportToPDF} style={{ padding: "8px 12px", background: "#f59e0b", color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
-                📄 PDF
-              </button>
-              <button onClick={onClose} style={{ padding: "10px 12px", background: "#ef4444", color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, width: "100%" }}>
-                ✕ Close Mind Map
-              </button>
-            </div>
-
-            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-              💡 Tips: Double-click to edit • Right-click to delete • Use mouse wheel or +/− to zoom
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Info Panel */}
+      {/* Export buttons - top right */}
       <div
         style={{
           position: "absolute",
-          top: 10,
-          right: 10,
+          top: 20,
+          right: 20,
           zIndex: 10,
-          background: "#fff",
-          padding: "10px",
-          borderRadius: "8px",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-          fontSize: "12px",
-          color: "#666",
+          display: "flex",
+          gap: 12,
         }}
       >
-        <div>Nodes: {nodes.length}</div>
-        <div>Links: {links.length}</div>
+        <button
+          onClick={exportToPNG}
+          style={{
+            background: "rgba(255,255,255,0.1)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: "50%",
+            width: 48,
+            height: 48,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            backdropFilter: "blur(10px)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(238, 255, 244, 0.8)";
+            e.currentTarget.style.transform = "scale(1.1)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+          title="Export as PNG"
+        >
+          <Download size={20} color="rgba(255,255,255,0.8)" />
+        </button>
+        
+        <button
+          onClick={exportToPDF}
+          style={{
+            background: "rgba(255,255,255,0.1)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: "50%",
+            width: 48,
+            height: 48,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            backdropFilter: "blur(10px)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(244, 237, 225, 0.8)";
+            e.currentTarget.style.transform = "scale(1.1)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+          title="Export as PDF"
+        >
+          <FileText size={20} color="rgba(255,255,255,0.8)" />
+        </button>
       </div>
 
-      {/* SVG Canvas with dark gradient + dotted grid */}
+      
+
+      {/* SVG Canvas with dark gradient + dotted grid + animated background */}
       <div
         ref={containerRef}
         style={{
@@ -637,9 +589,23 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
           height: "100%",
           background:"#9b92d4",
           overflow: "hidden",
+          position: "relative",
         }}
       >
-        <svg ref={svgRef} width="100%" height="100%" style={{ border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6 }} />
+        {/* Subtle animated starry background */}
+        <div 
+          style={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0.85,
+            mixBlendMode: "multiply",
+            zIndex: 0,
+          }}
+        >
+          <AnimatedBackground />
+        </div>
+        
+        <svg ref={svgRef} width="100%" height="100%" style={{ border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6, position: "relative", zIndex: 1 }} />
 
         {/* Zoom controls (minimize/maximize + center) */}
         <div
@@ -650,15 +616,15 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
             display: "flex",
             flexDirection: "column",
             gap: 8,
-            background: "rgba(255,255,255,0.85)",
+            background: "rgba(255,255,255,0.1)",
             borderRadius: 10,
             boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
             padding: 6,
+            zIndex: 2,
+            backdropFilter: "blur(10px)",
           }}
         >
-          <button onClick={zoomIn} title="Zoom In" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontWeight: 700 }}>+</button>
-          <button onClick={zoomOut} title="Zoom Out" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontWeight: 700 }}>−</button>
-          <button onClick={centerOnRoot} title="Center on Root" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer" }}>⌂</button>
+          <button onClick={centerOnRoot} title="Center on Root" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", cursor: "pointer", color: "rgba(255,255,255,0.8)" }}>⌂</button>
         </div>
 
         {/* MiniMap bottom-right */}
@@ -669,12 +635,13 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
             bottom: 18,
             width: 200,
             height: 140,
-            background: "rgba(255,255,255,0.75)",
+            background: "rgba(255,255,255,0.1)",
             backdropFilter: "blur(2px)",
             borderRadius: 10,
             boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
             padding: 8,
             pointerEvents: "none",
+            zIndex: 2,
           }}
         >
           <svg ref={miniMapSvgRef} width="100%" height="100%" />

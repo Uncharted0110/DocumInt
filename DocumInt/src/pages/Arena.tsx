@@ -761,20 +761,22 @@ const Arena = () => {
                 </div>
             )}
             {/* Edit Layout toggle + Reset (visible in edit mode) */}
-            <div className="fixed top-3 right-3 z-[60] flex items-center gap-2">
-                {isFreeLayout && (
-                    <button
-                        className="px-3 py-1.5 rounded-full chip-neo hover-lift text-sm"
-                        onClick={resetToDefaults}
-                        title="Reset layout to defaults"
-                    >
-                        Reset layout
+            {!isMindmapVisible && (
+                <div className="fixed top-3 right-3 z-[60] flex items-center gap-2">
+                    {isFreeLayout && (
+                        <button
+                            className="px-3 py-1.5 rounded-full chip-neo hover-lift text-sm"
+                            onClick={resetToDefaults}
+                            title="Reset layout to defaults"
+                        >
+                            Reset layout
+                        </button>
+                    )}
+                    <button className="px-3 py-1.5 rounded-full btn-neo hover-lift text-sm flex items-center gap-2" onClick={() => setIsFreeLayout(v=>!v)} title="Toggle free layout">
+                        <Move size={16} /> {isFreeLayout ? 'Exit layout' : 'Edit layout'}
                     </button>
-                )}
-                <button className="px-3 py-1.5 rounded-full btn-neo hover-lift text-sm flex items-center gap-2" onClick={() => setIsFreeLayout(v=>!v)} title="Toggle free layout">
-                    <Move size={16} /> {isFreeLayout ? 'Exit layout' : 'Edit layout'}
-                </button>
-            </div>
+                </div>
+            )}
         </>
     );
 };

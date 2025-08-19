@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FlipHorizontal2, X } from 'lucide-react';
+import { LucideInfo, AudioLinesIcon, X } from 'lucide-react';
 
 export type FlippableCardItem = {
   id: string;
@@ -96,7 +96,11 @@ const FlippableCards: React.FC<FlippableCardsProps> = ({
                 onKeyDown={(e) => e.stopPropagation()}
                 className="absolute right-2 top-2 z-10 px-2 py-1 rounded-md border bg-white/80 hover:bg-white shadow-sm"
               >
-                <FlipHorizontal2 size={14} className={isFlipped ? 'text-indigo-600' : 'text-gray-600'} />
+                {isFlipped ? (
+                  <LucideInfo size={14} className="text-indigo-600" />
+                ) : (
+                  <AudioLinesIcon size={14} className="text-gray-600" />
+                )}
               </button>
 
               {/* Delete button */}
