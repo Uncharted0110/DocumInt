@@ -11,7 +11,9 @@ interface MindmapNode {
   fileName?: string;
   page?: number;
   section?: string;
-  type?: 'root' | 'source' | 'insight';
+  type?: 'root' | 'source';
+  content?: string; // Full chunk content or analysis
+  document?: string; // Full document path
 }
 
 interface MindmapLink {
@@ -23,7 +25,7 @@ interface MindmapLink {
 interface MindmapContextType {
   nodes: MindmapNode[];
   links: MindmapLink[];
-  updateMindmap: (selectedText: string, insights: any[], sources: any[]) => void;
+  updateMindmap: (selectedText: string, nodes: any[], links: any[]) => void;
 }
 
 const MindmapContext = createContext<MindmapContextType | undefined>(undefined);
@@ -46,34 +48,7 @@ export const MindmapProvider: React.FC<MindmapProviderProps> = ({ children }) =>
   ]);
   const [links, setLinks] = useState<MindmapLink[]>([]);
 
-  const updateMindmap = (selectedText: string, _insights: any[], sources: any[]) => {
-    // Build nodes: root = full selected text; children = source entries with page metadata
-    const newNodes: MindmapNode[] = [
-      { id: '1', label: selectedText, x: 0, y: 0, color: '#ffcc00', type: 'root' },
-    ];
-    const newLinks: MindmapLink[] = [];
-
-    sources.slice(0, 8).forEach((source: any, index: number) => {
-      const sourceId = `source_${index}`;
-      const docStr = String(source.document ?? '');
-      const base = docStr.split(/[/\\]/).pop() || docStr;
-      const page = Number(source.page_number) || 1;
-  const section = source.section_title ? ' • ' + String(source.section_title) : '';
-  const label = base + ' (p.' + page + ')' + section;
-      newNodes.push({
-        id: sourceId,
-        label,
-        x: 0,
-        y: 0,
-        color: '#81c784',
-        fileName: base,
-        page,
-        section: source.section_title,
-        type: 'source',
-      });
-      newLinks.push({ id: `link_${sourceId}`, source: '1', target: sourceId });
-    });
-
+  const updateMindmap = (_selectedText: string, newNodes: any[], newLinks: any[]) => {
     setNodes(newNodes);
     setLinks(newLinks);
   };

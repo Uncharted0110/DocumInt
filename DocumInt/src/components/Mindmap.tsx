@@ -8,10 +8,12 @@ import { AnimatedBackground } from './background';
 import { ArrowLeft, Download, FileText } from 'lucide-react';
 
 // Spacing & animation knobs
-const V_SPACING = 90; // vertical spacing between rows
-const H_SPACING = 200; // horizontal spacing between columns
+const MIN_V_SPACING = 120; // minimum vertical spacing between rows
+const MIN_H_SPACING = 250; // minimum horizontal spacing between columns
 const COLLAPSE_DURATION = 250; // ms
 const DRAG_THRESHOLD_PX = 3; // minimum movement before considering as drag
+const NODE_PADDING = 20; // padding inside nodes
+const INTER_NODE_MARGIN = 40; // margin between nodes
 
 interface Node {
   id: string;
@@ -22,7 +24,9 @@ interface Node {
   fileName?: string;
   page?: number;
   section?: string;
-  type?: 'root' | 'source' | 'insight';
+  type?: 'root' | 'source';
+  content?: string; // Full chunk content or analysis
+  document?: string; // Full document path
 }
 
 interface Link {
@@ -52,6 +56,10 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
   const miniViewportRef = useRef<SVGRectElement>(null);
   const zoomTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+
+  // Node viewer state
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const [nodes, setNodes] = useState<Node[]>([
     { id: "1", label: "Central Idea", x: 0, y: 0, color: "#ffcc00" },
@@ -163,9 +171,74 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
     // Build hierarchy and layout
     const treeData = buildHierarchy();
     const root = d3.hierarchy<any>(treeData);
+    
+    // Calculate dynamic node sizes first
+    const nodeSizes: Record<string, { width: number; height: number }> = {};
+    
+    root.each((d: any) => {
+      const text = d.data.label || "";
+      // Better text measurement approach
+      const lines = text.split(/\r?\n/).filter((line: string) => line.trim().length > 0);
+      
+      // Estimate character width more accurately (using average character width in pixels)
+      const avgCharWidth = 8; // pixels per character for 14px sans-serif font
+      const maxCharsPerLine = 45; // reasonable line length for readability
+      
+      // Calculate wrapped lines
+      const wrappedLines: string[] = [];
+      lines.forEach((line: string) => {
+        if (line.length <= maxCharsPerLine) {
+          wrappedLines.push(line);
+        } else {
+          // Break long lines at word boundaries
+          const words = line.split(' ');
+          let currentLine = '';
+          words.forEach((word: string) => {
+            if ((currentLine + word).length <= maxCharsPerLine) {
+              currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+              if (currentLine) wrappedLines.push(currentLine);
+              currentLine = word;
+            }
+          });
+          if (currentLine) wrappedLines.push(currentLine);
+        }
+      });
+      
+      // Calculate dimensions based on content
+      const maxLineLength = Math.max(...wrappedLines.map((line: string) => line.length), 8);
+      const lineCount = Math.max(wrappedLines.length, 1);
+      
+      // Calculate width and height with proper margins
+      const contentWidth = maxLineLength * avgCharWidth;
+      const minWidth = 120;
+      const maxWidth = 400;
+      const width = Math.min(Math.max(contentWidth + NODE_PADDING * 2, minWidth), maxWidth);
+      
+      const lineHeight = 20; // pixels per line
+      const height = Math.max(lineCount * lineHeight + NODE_PADDING * 2, 60);
+      
+      nodeSizes[d.data.id] = { width, height };
+    });
+    
+    // Calculate dynamic spacing based on node sizes
+    const maxNodeWidth = Math.max(...Object.values(nodeSizes).map(s => s.width));
+    const maxNodeHeight = Math.max(...Object.values(nodeSizes).map(s => s.height));
+    
+    const dynamicHSpacing = Math.max(MIN_H_SPACING, maxNodeWidth + INTER_NODE_MARGIN);
+    const dynamicVSpacing = Math.max(MIN_V_SPACING, maxNodeHeight + INTER_NODE_MARGIN);
+    
     const treeLayout = d3.tree<any>()
-      .nodeSize([V_SPACING, H_SPACING])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 1.25));
+      .nodeSize([dynamicVSpacing, dynamicHSpacing])
+      .separation((a, b) => {
+        // Increase separation for nodes with larger content
+        const aSize = nodeSizes[a.data.id] || { width: 160, height: 60 };
+        const bSize = nodeSizes[b.data.id] || { width: 160, height: 60 };
+        const avgWidth = (aSize.width + bSize.width) / 2;
+        const baseSeparation = a.parent === b.parent ? 1 : 1.5;
+        const sizeFactor = Math.max(1, avgWidth / 200); // Scale separation based on node size
+        return baseSeparation * sizeFactor;
+      });
 
     treeLayout(root);
 
@@ -246,11 +319,13 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
       .each(function (d: any) {
         const group = d3.select(this);
         const text = d.data.label || "";
-        // Estimate width: 10px per character, min 160, max 400
-        const lines = text.split(/\r?\n|(?<=\.) /g);
-        const maxLineLength = Math.max(...lines.map((l: string) => l.length));
-        const rectWidth = Math.min(Math.max(16 * maxLineLength, 160), 400);
-        const rectHeight = Math.max(48, 24 * lines.length);
+        
+        // Use pre-calculated sizes
+        const nodeSize = nodeSizes[d.data.id] || { width: 160, height: 60 };
+        const rectWidth = nodeSize.width;
+        const rectHeight = nodeSize.height;
+        
+        // Main node rectangle
         group.append("rect")
           .attr("x", -rectWidth / 2)
           .attr("y", -rectHeight / 2)
@@ -262,20 +337,76 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
           .attr("stroke", "#333")
           .attr("stroke-width", 2)
           .style("filter", "drop-shadow(1px 1px 2px rgba(0,0,0,0.25))");
+        
+        // Node text content with proper word wrapping
         group.append("foreignObject")
-          .attr("x", -rectWidth / 2 + 8)
-          .attr("y", -rectHeight / 2 + 8)
-          .attr("width", rectWidth - 16)
-          .attr("height", rectHeight - 16)
+          .attr("x", -rectWidth / 2 + NODE_PADDING / 2)
+          .attr("y", -rectHeight / 2 + NODE_PADDING / 2)
+          .attr("width", rectWidth - NODE_PADDING)
+          .attr("height", rectHeight - NODE_PADDING)
           .append("xhtml:div")
           .style("font", "14px sans-serif")
           .style("font-weight", "bold")
           .style("color", "#222")
-          .style("white-space", "pre-line")
-          .style("word-break", "break-word")
+          .style("white-space", "pre-wrap")
+          .style("word-wrap", "break-word")
+          .style("overflow-wrap", "break-word")
           .style("line-height", "1.4")
           .style("text-align", "center")
+          .style("display", "flex")
+          .style("align-items", "center")
+          .style("justify-content", "center")
+          .style("height", "100%")
+          .style("box-sizing", "border-box")
           .text(text);
+
+        // Add viewer PDF icon for source nodes
+        const nodeData = ctxNodes.find((n: any) => n.id === d.data.id);
+        if (nodeData && nodeData.type === 'source' && nodeData.content) {
+          const iconGroup = group.append("g")
+            .attr("class", "viewer-icon")
+            .style("cursor", "pointer");
+
+          // PDF/Document icon using foreignObject - positioned relative to actual node size
+          const iconForeign = iconGroup.append("foreignObject")
+            .attr("x", rectWidth / 2 - 30)
+            .attr("y", -rectHeight / 2 + 8)
+            .attr("width", 24)
+            .attr("height", 24);
+
+          iconForeign.append("xhtml:div")
+            .style("width", "24px")
+            .style("height", "24px")
+            .style("display", "flex")
+            .style("align-items", "center")
+            .style("justify-content", "center")
+            .style("color", "rgba(255, 255, 255, 0.8)")
+            .style("transition", "color 0.2s ease")
+            .style("cursor", "pointer")
+            .html(`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14,2 14,8 20,8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10,9 9,9 8,9"></polyline></svg>`);
+
+          // Click handler for the icon group
+          iconGroup.on("click", function(event: MouseEvent) {
+            event.stopPropagation(); // Prevent node drag/click
+            if (nodeData) {
+              setSelectedNode(nodeData);
+              setIsViewerOpen(true);
+            }
+          });
+
+          // Hover effects
+          iconGroup
+            .on("mouseenter", function() {
+              d3.select(this).select("foreignObject div")
+                .style("color", "rgba(255, 255, 255, 1)")
+                .style("transform", "scale(1.1)");
+            })
+            .on("mouseleave", function() {
+              d3.select(this).select("foreignObject div")
+                .style("color", "rgba(255, 255, 255, 0.8)")
+                .style("transform", "scale(1)");
+            });
+        }
       });
 
     // Update positions for all nodes
@@ -300,11 +431,14 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
     allNodes.on("click", (event: MouseEvent, d: any) => {
       if ((event as any).detail && (event as any).detail > 1) return; // ignore dblclick
       if (isDraggingRef.current) return;
+      
       // If this is a source node with navigation metadata, trigger navigation
       if (d?.data?.fileName && d?.data?.page) {
         onNavigateToSource?.({ fileName: d.data.fileName, page: d.data.page, searchText: d.data.section });
         return;
       }
+      
+      // Default behavior: toggle collapse for nodes with children
       setCollapsedIds((prev) => {
         const next = new Set(prev);
         if (next.has(d.data.id)) next.delete(d.data.id);
@@ -477,176 +611,282 @@ export default function MindMap({ onClose, onNavigateToSource }: Readonly<MindMa
   };
 
   return (
-    <div style={{ width: "100%", height: "100vh", position: "relative" }}>
-      {/* Close button - transparent left arrow at top left */}
-      <button
-        onClick={onClose}
-        style={{
-          position: "absolute",
-          top: 20,
-          left: 20,
-          zIndex: 10,
-          background: "rgba(255,255,255,0.1)",
-          border: "1px solid rgba(255,255,255,0.2)",
-          borderRadius: "50%",
-          width: 48,
-          height: 48,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          transition: "all 0.3s ease",
+    <div style={{ width: "100%", height: "100vh", display: "flex" }}>
+      {/* Left Panel - Mindmap */}
+      <div style={{
+        flex: 1,
+        position: "relative",
+        background: "#9b92d4",
+        overflow: "hidden",
+      }}>
+        {/* Close button - transparent left arrow at top left */}
+        <button
+          onClick={onClose}
+          style={{
+            position: "absolute",
+            top: 20,
+            left: 20,
+            zIndex: 10,
+            background: "rgba(255,255,255,0.1)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: "50%",
+            width: 48,
+            height: 48,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            backdropFilter: "blur(10px)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.2)";
+            e.currentTarget.style.transform = "scale(1.1)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+          title="Close Mind Map"
+        >
+          <ArrowLeft size={20} color="rgba(255,255,255,0.8)" />
+        </button>
+
+        {/* Export buttons - top right of mindmap panel */}
+        <div
+          style={{
+            position: "absolute",
+            top: 20,
+            right: 20,
+            zIndex: 10,
+            display: "flex",
+            gap: 12,
+          }}
+        >
+          <button
+            onClick={exportToPNG}
+            style={{
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: "50%",
+              width: 48,
+              height: 48,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.3s ease",
+              backdropFilter: "blur(10px)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(238, 255, 244, 0.8)";
+              e.currentTarget.style.transform = "scale(1.1)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+              e.currentTarget.style.transform = "scale(1)";
+            }}
+            title="Export as PNG"
+          >
+            <Download size={20} color="rgba(255,255,255,0.8)" />
+          </button>
+          
+          <button
+            onClick={exportToPDF}
+            style={{
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: "50%",
+              width: 48,
+              height: 48,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.3s ease",
+              backdropFilter: "blur(10px)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(244, 237, 225, 0.8)";
+              e.currentTarget.style.transform = "scale(1.1)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+              e.currentTarget.style.transform = "scale(1)";
+            }}
+            title="Export as PDF"
+          >
+            <FileText size={20} color="rgba(255,255,255,0.8)" />
+          </button>
+        </div>
+
+        {/* SVG Canvas with animated background */}
+        <div
+          ref={containerRef}
+          style={{
+            width: "100%",
+            height: "100%",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          {/* Subtle animated starry background */}
+          <div 
+            style={{
+              position: "absolute",
+              inset: 0,
+              opacity: 0.85,
+              mixBlendMode: "multiply",
+              zIndex: 0,
+            }}
+          >
+            <AnimatedBackground />
+          </div>
+          
+          <svg ref={svgRef} width="100%" height="100%" style={{ border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6, position: "relative", zIndex: 1 }} />
+
+          {/* Zoom controls (minimize/maximize + center) */}
+          <div
+            style={{
+              position: "absolute",
+              left: 12,
+              bottom: 18,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              background: "rgba(255,255,255,0.1)",
+              borderRadius: 10,
+              boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
+              padding: 6,
+              zIndex: 2,
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            <button onClick={centerOnRoot} title="Center on Root" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", cursor: "pointer", color: "rgba(255,255,255,0.8)" }}>⌂</button>
+          </div>
+
+          {/* MiniMap bottom-right */}
+          <div
+            style={{
+              position: "absolute",
+              right: 18,
+              bottom: 18,
+              width: 200,
+              height: 140,
+              background: "rgba(255,255,255,0.1)",
+              backdropFilter: "blur(2px)",
+              borderRadius: 10,
+              boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
+              padding: 8,
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          >
+            <svg ref={miniMapSvgRef} width="100%" height="100%" />
+          </div>
+        </div>
+      </div>
+
+      {/* Right Panel - Node Content Viewer */}
+      {isViewerOpen && selectedNode && (
+        <div style={{
+          width: "400px",
+          background: "rgba(255, 255, 255, 0.95)",
           backdropFilter: "blur(10px)",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "rgba(255,255,255,0.2)";
-          e.currentTarget.style.transform = "scale(1.1)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-          e.currentTarget.style.transform = "scale(1)";
-        }}
-        title="Close Mind Map"
-      >
-        <ArrowLeft size={20} color="rgba(255,255,255,0.8)" />
-      </button>
-
-      {/* Export buttons - top right */}
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          right: 20,
-          zIndex: 10,
+          borderLeft: "1px solid rgba(255, 255, 255, 0.2)",
           display: "flex",
-          gap: 12,
-        }}
-      >
-        <button
-          onClick={exportToPNG}
-          style={{
-            background: "rgba(255,255,255,0.1)",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: "50%",
-            width: 48,
-            height: 48,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            transition: "all 0.3s ease",
-            backdropFilter: "blur(10px)",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(238, 255, 244, 0.8)";
-            e.currentTarget.style.transform = "scale(1.1)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-            e.currentTarget.style.transform = "scale(1)";
-          }}
-          title="Export as PNG"
-        >
-          <Download size={20} color="rgba(255,255,255,0.8)" />
-        </button>
-        
-        <button
-          onClick={exportToPDF}
-          style={{
-            background: "rgba(255,255,255,0.1)",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: "50%",
-            width: 48,
-            height: 48,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            transition: "all 0.3s ease",
-            backdropFilter: "blur(10px)",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(244, 237, 225, 0.8)";
-            e.currentTarget.style.transform = "scale(1.1)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-            e.currentTarget.style.transform = "scale(1)";
-          }}
-          title="Export as PDF"
-        >
-          <FileText size={20} color="rgba(255,255,255,0.8)" />
-        </button>
-      </div>
+          flexDirection: "column",
+          zIndex: 10,
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: "20px",
+            borderBottom: "1px solid rgba(0, 0, 0, 0.1)",
+            background: "linear-gradient(135deg, rgba(199, 210, 254, 0.3), rgba(221, 214, 254, 0.3))",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <h2 style={{
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  color: "#1f2937",
+                  margin: "0 0 8px 0",
+                  lineHeight: "1.4",
+                }}>{selectedNode.label}</h2>
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "4px",
+                  fontSize: "12px",
+                  color: "#6b7280",
+                }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    📄 <strong>{selectedNode.fileName || 'Unknown Document'}</strong>
+                  </span>
+                  {selectedNode.page && (
+                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      📖 Page <strong>{selectedNode.page}</strong>
+                    </span>
+                  )}
+                  {selectedNode.section && (
+                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      📑 Section: <strong>{selectedNode.section}</strong>
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsViewerOpen(false);
+                  setSelectedNode(null);
+                }}
+                style={{
+                  padding: "8px",
+                  background: "rgba(255, 255, 255, 0.8)",
+                  border: "1px solid rgba(0, 0, 0, 0.1)",
+                  borderRadius: "50%",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(243, 244, 246, 1)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.8)";
+                }}
+                title="Close"
+              >
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
 
-      
-
-      {/* SVG Canvas with dark gradient + dotted grid + animated background */}
-      <div
-        ref={containerRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          background:"#9b92d4",
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
-        {/* Subtle animated starry background */}
-        <div 
-          style={{
-            position: "absolute",
-            inset: 0,
-            opacity: 0.85,
-            mixBlendMode: "multiply",
-            zIndex: 0,
-          }}
-        >
-          <AnimatedBackground />
+          {/* Content */}
+          <div style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "20px",
+          }}>
+            <div style={{
+              whiteSpace: "pre-wrap",
+              lineHeight: "1.6",
+              color: "#374151",
+              background: "rgba(249, 250, 251, 0.8)",
+              padding: "16px",
+              borderRadius: "8px",
+              border: "1px solid rgba(0, 0, 0, 0.05)",
+              fontSize: "14px",
+            }}>
+              {selectedNode.content || 'No detailed content available.'}
+            </div>
+          </div>
         </div>
-        
-        <svg ref={svgRef} width="100%" height="100%" style={{ border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6, position: "relative", zIndex: 1 }} />
-
-        {/* Zoom controls (minimize/maximize + center) */}
-        <div
-          style={{
-            position: "absolute",
-            left: 12,
-            bottom: 18,
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            background: "rgba(255,255,255,0.1)",
-            borderRadius: 10,
-            boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
-            padding: 6,
-            zIndex: 2,
-            backdropFilter: "blur(10px)",
-          }}
-        >
-          <button onClick={centerOnRoot} title="Center on Root" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", cursor: "pointer", color: "rgba(255,255,255,0.8)" }}>⌂</button>
-        </div>
-
-        {/* MiniMap bottom-right */}
-        <div
-          style={{
-            position: "absolute",
-            right: 18,
-            bottom: 18,
-            width: 200,
-            height: 140,
-            background: "rgba(255,255,255,0.1)",
-            backdropFilter: "blur(2px)",
-            borderRadius: 10,
-            boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
-            padding: 8,
-            pointerEvents: "none",
-            zIndex: 2,
-          }}
-        >
-          <svg ref={miniMapSvgRef} width="100%" height="100%" />
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -107,9 +107,55 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
   }, [items, analysisById, projectName]);
 
   const buildMindmap = useCallback((selected: string, analysis: GeminiAnalysisResp) => {
-    const insights = (analysis.gemini_analysis || []).filter(a=>!a.error);
-    const sources = analysis.retrieval_results || [];
-    updateMindmap(selected, insights, sources);
+    // Use selected text as root node and relevant chunks as child nodes
+    const rootNode = {
+      id: "1",
+      label: selected.length > 100 ? selected.slice(0, 100) + "..." : selected,
+      x: 0,
+      y: 0,
+      color: "#ffcc00",
+      type: "root"
+    };
+
+    const nodes: any[] = [rootNode];
+    const links: { id: string; source: string; target: string }[] = [];
+
+    // Add retrieval results (relevant chunks) as child nodes
+    const retrievalResults = analysis.retrieval_results || [];
+    retrievalResults.forEach((result, index) => {
+      const nodeId = `chunk_${index + 2}`;
+      // Use section title or create a summarized heading instead of full content
+      const heading = result.section_title || 
+                     result.heading || 
+                     `Section ${index + 1}` ||
+                     (result.content ? result.content.slice(0, 50) + "..." : `Chunk ${index + 1}`);
+      
+      const docStr = String(result.document ?? '');
+      const base = docStr.split(/[/\\]/).pop() || docStr;
+      
+      nodes.push({
+        id: nodeId,
+        label: heading,
+        x: 0,
+        y: 0,
+        color: "#4cafef",
+        fileName: base,
+        page: result.page_number,
+        section: result.section_title,
+        content: result.content, // Store full content for viewer
+        document: result.document,
+        type: "source"
+      });
+
+      links.push({
+        id: `link_1_${nodeId}`,
+        source: "1",
+        target: nodeId
+      });
+    });
+
+    // Update mindmap context with the new structure (only source nodes, no analysis)
+    updateMindmap(selected, nodes, links);
   }, [updateMindmap]);
 
   const buildFrontExpanded = useCallback((selected: string, analysis: GeminiAnalysisResp) => {
@@ -198,10 +244,13 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
       setItems(prev => [...prev, newItem]);
       setAnalysisById(prev => ({ ...prev, [id]: analysis }));
       setPodcastStatus(prev => ({ ...prev, [id]: { state: 'idle' } }));
+      
+      // Automatically build and update mindmap with the new analysis
+      buildMindmap(selectedText, analysis);
     };
     window.addEventListener('documint:newInsightAnalysis', handler as EventListener);
     return () => window.removeEventListener('documint:newInsightAnalysis', handler as EventListener);
-  }, []); // Remove buildFrontExpanded dependency to avoid circular reference
+  }, [buildMindmap]); // Include buildMindmap dependency
 
   const genPodcast = async (id: string) => {
     const analysis = analysisById[id];

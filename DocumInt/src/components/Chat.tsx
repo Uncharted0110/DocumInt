@@ -176,9 +176,6 @@ const Chat: React.FC<ChatProps> = ({
   <div className="fixed bottom-24 right-4 z-[2147483647] bg-white rounded-lg shadow-2xl border border-gray-200 w-96 h-[560px] flex flex-col">
           <div className="flex items-center justify-between p-3 border-b border-gray-200">
             <div className="font-semibold text-gray-700">Connecting the Dots</div>
-            <button onClick={toggleChat} className="text-gray-500 hover:text-gray-700">
-              <X size={18}/>
-            </button>
           </div>
           
           {/* Chat Messages */}
