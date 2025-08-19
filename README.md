@@ -31,18 +31,17 @@
   - Manual TOC parsing
   - Heuristic fallback (fonts, regex, layout)  
 - **Content Chunking**: Heading-aware segmentation, page-aware attribution  
-- **Persona + Task Driven Search**  
 - **AI Insights**:
-  - Region-based (drag area on PDF → Gemini insights)  
-  - Inline popover for selections  
+  - Selection-based (select text with cursor on PDF → Gemini insights)  
+  - Onscreen popover for insights  
   - Server-side Gemini analysis for contextual snippets  
-- **Optional Podcastify**: Generate conversational scripts  
-- **Azure TTS Integration**: Stream audio from text analysis  
+- **Podcastify**: Generate podcast for the section along with insights for intuitive experience  
+- **Azure TTS Integration**: Stream audio from text analysis
+- **MindMap**: Visualizes all the relavant sections along with the corressponding text in the PDFs.
 
 **Performance (local tests)**:
 - PDF Outline extraction: ~1–2s per file  
-- Hybrid retrieval build: ~2–4s per PDF (100–200 chunks)  
-- Region insights: <3s latency (client → Gemini → UI)  
+- Hybrid retrieval build: Immediate (Takes ~5-10s until embeddings are done)
 
 ---
 
@@ -83,7 +82,8 @@ DocumInt/
 ### Required API Keys
 - **Adobe PDF Embed API** → `VITE_ADOBE_API_KEY`  
 - **Google Gemini API** → `VITE_GEMINI_API_KEY`  
-- **Azure Speech (TTS)** → `SPEECH_KEY`, `SPEECH_REGION`  
+- **Azure Speech (TTS)** → `SPEECH_API_KEY`, `SPEECH_REGION`  
+Please use the above mentioned name for the API keys, else VITE does not recognise the keys.
 
 ---
 
@@ -176,13 +176,70 @@ Frontend runs on: `http://localhost:5173`
 
 ---
 
-## 🛠️ Advanced Features
-- Region-select insights with Adobe PDF Embed + PDF.js  
-- Persona-driven optimization for retrieval  
-- Azure TTS for audio podcast mode  
-- Modular backend for plugging in other LLMs  
 
----
+```mermaid
+flowchart TD
+    A["User Creates Project"] L_A_B_0@--> B["Upload PDFs"]
+    B L_B_C_0@--> C["Document Processing<br>Extract + Index + Embed"]
+    C L_C_D_0@--> D{"DocumInt"}
+    D L_D_E_0@--> E["PDF Viewer<br>Navigate &amp; Select Text"] & F["Insight Generation"] & G["Mind Maps<br>Visualize Connections"] & H["Podcastify<br>Generate Audio"]
+    E L_E_I_0@--> I["AI Insights<br>Gemini Analysis"]
+    F L_F_J_0@--> J["Retreive relevant sections and combine"]
+    G L_G_K_0@--> K["Relationship Analysis<br>Cross-section Links"]
+    H L_H_L_0@--> L["Content Generation<br>Script + TTS"]
+    I L_I_M_0@--> M["Contextual Analysis<br>+ Source Attribution"]
+    J L_J_N_0@--> N["Ranked Answers<br>+ Page References"]
+    K L_K_O_0@--> O["Interactive Visualizations<br>+ Navigation"]
+    L L_L_P_0@--> P["MP3 Podcasts<br>+ Downloadable Content"]
 
-## 📜 License
-MIT License.
+     A:::userFlow
+     B:::userFlow
+     D:::platform
+     E:::userFlow
+     F:::userFlow
+     G:::userFlow
+     H:::userFlow
+     I:::aiFeature
+     J:::aiFeature
+     K:::aiFeature
+     L:::aiFeature
+     M:::output
+     N:::output
+     O:::output
+     P:::output
+    classDef userFlow fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef aiFeature fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef output fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef platform fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px
+    style A color:#000000
+    style B color:#000000
+    style D color:#000000
+    style E color:#000000
+    style F color:#000000
+    style G color:#000000
+    style H color:#000000
+    style I color:#000000
+    style J color:#000000
+    style K color:#000000
+    style L color:#000000
+    style M color:#000000
+    style N color:#000000
+    style O color:#000000
+    style P color:#000000
+
+    L_A_B_0@{ animation: fast } 
+    L_B_C_0@{ animation: fast } 
+    L_C_D_0@{ animation: fast } 
+    L_D_E_0@{ animation: fast } 
+    L_D_F_0@{ animation: fast } 
+    L_D_G_0@{ animation: fast } 
+    L_D_H_0@{ animation: fast } 
+    L_E_I_0@{ animation: fast } 
+    L_F_J_0@{ animation: fast } 
+    L_G_K_0@{ animation: fast } 
+    L_H_L_0@{ animation: fast } 
+    L_I_M_0@{ animation: fast } 
+    L_J_N_0@{ animation: fast } 
+    L_K_O_0@{ animation: fast } 
+    L_L_P_0@{ animation: fast } 
+```
