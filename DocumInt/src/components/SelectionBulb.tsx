@@ -180,7 +180,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
       <button
         onClick={handleBulbClick}
         disabled={!selectedText || isGenerating || isSearchingChat}
-  className={`fixed bottom-6 right-28 z-[2147483647] w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
+  className={`fixed top-1 right-85 z-[2147483647] w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${buttonColorClass} disabled:opacity-60`}
         title={buttonTitle}
         style={{
           boxShadow: isVisible && !isGenerating && !isSearchingChat ? '0 0 20px rgba(255, 193, 7, 0.6), 0 0 40px rgba(255, 193, 7, 0.4)' : undefined
