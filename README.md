@@ -25,6 +25,7 @@
 ---
 
 ## Key Features and Metrics
+- **Connecting the Dots**: Shows the most relevant sections across the PDFs
 - **Hybrid Retrieval**: BM25 + Sentence Embeddings with domain-specific weighting  
 - **PDF Outline Extraction**:
   - Built-in TOC when available
@@ -38,6 +39,11 @@
 - **Podcastify**: Generate podcast for the section along with insights for intuitive experience  
 - **Azure TTS Integration**: Stream audio from text analysis
 - **MindMap**: Visualizes all the relavant sections along with the corressponding text in the PDFs.
+- **No Model Usage**: All relevant source search is done by our in-house engine and does not use AI models, which enhances speed by 5 times, and gives condiserable accuracy in search results.
+- **Option to Add PDFs**: New PDFs can be added to the DocumInt(Project) on the fly.
+
+> [!WARNING]
+> Wait until the embeddings load, it might take 5 to 10 seconds, before you will be able to interact with the PDFs, take a look at the backend logs for a more detailed picture.
 
 **Performance (local tests)**:
 - PDF Outline extraction: ~1–2s per file  
@@ -84,6 +90,7 @@ DocumInt/
 - **Google Gemini API** → `VITE_GEMINI_API_KEY`  
 - **Azure Speech (TTS)** → `SPEECH_API_KEY`, `SPEECH_REGION`  
 Please use the above mentioned name for the API keys, else VITE does not recognise the keys.
+We have used Azure Speech Service API for this application, so please do use the same API key for testing. (<a href="https://ai.azure.com/explore/models/aiservices/Azure-AI-Speech/version/1/registry/azureml-cogsvc/tryout#realtime">Click here to access the API page</a>).
 
 ---
 
@@ -91,7 +98,12 @@ Please use the above mentioned name for the API keys, else VITE does not recogni
 
 ### Local Execution
 
-**Backend**
+#### Option 1: Backend and Frontend Together
+
+Go to `Backend/app.py` and change `/app/web/dist` to `../DocumInt/dist`
+
+Go to `DocumInt` directory     and run `npm run build`.
+
 ```bash
 cd Backend
 python -m venv venv
@@ -99,30 +111,54 @@ source venv/bin/activate      # Linux/macOS
 venv\Scripts\activate       # Windows
 
 pip install -r requirements.txt
-uvicorn app:app --reload
+python app.py
 ```
 
-**Frontend**
+Frontend & Backend runs on: `http://localhost:8000`
+
+#### Option 2: Backend And Frontend Separated
+
+For the backend:
 ```bash
-cd Frontend
+cd Backend
+python -m venv venv
+source venv/bin/activate      # Linux/macOS
+venv\Scripts\activate       # Windows
+
+pip install -r requirements.txt
+python app.py
+```
+
+For the Frontend:
+```bash
+cd DocumInt
 npm install
 npm run dev
 ```
 
-Backend runs on: `http://localhost:8000`  
-Frontend runs on: `http://localhost:5173`  
+The application will run on `localhost:5173`
 
 ---
-
-
-
+### Docker Execution
+- Docker build:
+   ```console
+   docker build --no-cache --build-arg VITE_ADOBE_API_KEY=YOUR_ADOBE_API_KEY --build-arg VITE_GEMINI_API_KEY=YOUR_GEMINI_KEY -t documint .
+   ```
+> [!NOTE]
+> It takes around 350 to 500 seconds to build the Docker image.
+- Docker run:
+   ```console
+   docker run --name documint -p 8080:8080 -e SPEECH_API_KEY="AZURE_TTS_KEY" -e SPEECH_REGION=eastus -e GEMINI_MODEL=gemini-2.5-flash -e VITE_ADOBE_API_KEY="YOUR_ADOBE_API_KEY" -e VITE_GEMINI_API_KEY="YOUR_GEMINI_KEY" documint:latest
+   ```
+> [!WARNING]
+> The docker container runs on the port 8080, and can be accessed using `localhost:8080` ONLY
 ---
 
 ## 📡 API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Health check |
+| `/` | GET | Frontend serving endpoint |
 | `/extract-outline` | POST (file) | Extract title + structured outline |
 | `/cache-pdfs` | POST (files[]) | Upload and cache PDFs |
 | `/cache-status/{cache_key}` | GET | Check cache status |
@@ -130,10 +166,6 @@ Frontend runs on: `http://localhost:5173`
 | `/analyze-chunks-with-gemini` | POST | AI-enhanced retrieval |
 | `/podcastify-analysis` | POST | Generate conversational script |
 | `/tts` | POST | Azure TTS (streaming audio) |
-
----
-
-
 
 ---
 
@@ -163,16 +195,23 @@ Frontend runs on: `http://localhost:5173`
    - Emphasize first-page and heading text  
 
 ---
+## Troubleshooting
+> [!WARNING]
+> Make sure to follow the steps present to run the github repository.
 
- 
-
+- Remeber to use Azure Speech Service API only for Test-To-Speech(TTS).
+- If there is no PDF Viewer loading, make sure you are on `localhost` and not on IP addresses like `127.0.0.1` or `0.0.0.0`.
+- If the issue still persists, make sure to add the API key into the docker build command as well, due to the Vite's compile time loading.
+- If any other issue is present, you can raise the Issue in the <a href="https://github.com/Amoghk04/DocumInt/issues">Issues tab</a>.
+- **Embedding Waiting**: The Embeddings might take 5 to 10 seconds to load, so please wait until making any selection in the PDFs.
+- If panels are not visible, click on edit layout -> reset layout.
 ---
 
 ## ⚠️ Error Handling & Robustness
 - **Fallbacks**: BM25-only if embeddings/Gemini unavailable  
 - **PDF parsing**: Skips errors gracefully, continues indexing  
 - **Strict JSON Output**: Ensures schema consistency  
-- **Key Security**: All API keys must be stored in `.env`  
+- **Key Security**: All API keys must be stored in `.env` for local storage, and added during build and runtime in docker building and running.
 
 ---
 
@@ -243,14 +282,4 @@ flowchart TD
     L_K_O_0@{ animation: fast } 
     L_L_P_0@{ animation: fast } 
 ```
-
-## Docker Commands
-
-- Docker build:
-   ```console
-   docker build --no-cache --build-arg VITE_ADOBE_API_KEY=YOUR_ADOBE_API_KEY --build-arg VITE_GEMINI_API_KEY=YOUR_GEMINI_KEY -t documint .
-   ```
-- Docker run:
-   ```console
-   docker run --name documint -p 8080:8080 -e SPEECH_API_KEY="AZURE_TTS_KEY" -e SPEECH_REGION=eastus -e GEMINI_MODEL=gemini-2.5-flash -e VITE_ADOBE_API_KEY="YOUR_ADOBE_API_KEY" -e VITE_GEMINI_API_KEY="YOUR_GEMINI_KEY" documint:latest
-   ```
+> Developed by Aditya K L, Amogh Kalasapura and Chirantana P as part of the Adobe India Hackathon 2025 Grand Finale. This project is registered under the GPL-3.0 License.
