@@ -158,7 +158,7 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
     updateMindmap(selected, nodes, links);
   }, [updateMindmap]);
 
-  const buildFrontExpanded = useCallback((selected: string, analysis: GeminiAnalysisResp) => {
+  const buildFrontExpanded = useCallback((_selected: string, analysis: GeminiAnalysisResp) => {
     const top = analysis.summary?.top_insights || [];
     const retrieval = analysis.retrieval_results || [];
     const details = (analysis.gemini_analysis || []).filter(a=>!a.error);
@@ -199,7 +199,6 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
         )}
         {details.length>0 && (
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-gray-700">Details</div>
             {details.slice(0,3).map((d,i)=>{
               const key=`det_${i}`;
               return (
@@ -211,18 +210,9 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
             })}
           </div>
         )}
-        <div>
-          <button
-            type="button"
-            onClick={(e)=>{ e.stopPropagation(); buildMindmap(selected, analysis); onOpenMindmap?.(); }}
-            className="px-2 py-1 text-[11px] rounded bg-purple-600 text-white hover:bg-purple-700"
-          >
-            View Mindmap
-          </button>
-        </div>
       </div>
     );
-  }, [onNavigateToPage, onNavigateToSource, onOpenMindmap, buildMindmap]);
+  }, [onNavigateToPage, onNavigateToSource, buildMindmap]);
 
   // Listen to SelectionBulb event
   useEffect(() => {
@@ -310,7 +300,14 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
       <div className="mb-2 flex items-center justify-between flex-shrink-0"><div className="font-semibold text-gray-700 flex items-center gap-2"><span className="w-4"></span> Insights</div><div className="text-xs text-gray-500">{items.length} total</div></div>
       <div className="text-xs text-gray-500 mb-3 italic">Select text with cursor to trigger the bulb</div>
       <div className="flex-1 overflow-y-auto">
-        <FlippableCards items={items} collapsedHeightClass="h-32" expandedHeightClass="h-[430px]" onFlip={handleFlip} onDelete={handleDelete} />
+        <FlippableCards items={items} collapsedHeightClass="h-32" expandedHeightClass="h-[430px]" onFlip={handleFlip} onDelete={handleDelete} onOpenMindmap={(id) => { 
+          const analysis = analysisById[id];
+          const item = items.find(i => i.id === id);
+          if (analysis && item) {
+            buildMindmap(item.frontTitle, analysis);
+            onOpenMindmap?.();
+          }
+        }} />
       </div>
     </div>
   );
