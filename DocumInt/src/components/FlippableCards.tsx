@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { LucideInfo, AudioLinesIcon, BrainCircuit } from 'lucide-react';
+import { LucideInfo, AudioLinesIcon, BrainCircuit, X } from 'lucide-react';
 
 export type FlippableCardItem = {
   id: string;
@@ -82,6 +82,23 @@ const FlippableCards: React.FC<FlippableCardsProps> = ({
                 isExpanded ? expandedHeightClass : collapsedHeightClass,
               ].join(' ')}
             >
+              {/* Delete button */}
+              {onDelete && (
+                <button
+                  type="button"
+                  aria-label="Delete card"
+                  title="Delete card"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item.id);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  className="absolute left-1 top-1 z-10 bg-transparent hover:bg-transparent transition-colors"
+                >
+                  <X size={14} className="text-gray-400 hover:text-red-600" />
+                </button>
+              )}
+
               {/* Flip icon button */}
               <button
                 type="button"
