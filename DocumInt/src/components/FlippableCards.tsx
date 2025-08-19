@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { LucideInfo, AudioLinesIcon, X } from 'lucide-react';
+import { LucideInfo, AudioLinesIcon, BrainCircuit } from 'lucide-react';
 
 export type FlippableCardItem = {
   id: string;
@@ -25,6 +25,7 @@ interface FlippableCardsProps {
   expandedHeightClass?: string;
   onFlip?: (id: string, flipped: boolean) => void; // NEW
   onDelete?: (id: string) => void; // NEW: Delete callback
+  onOpenMindmap?: (id: string) => void; // NEW: Mindmap callback
 }
 
 const FlippableCards: React.FC<FlippableCardsProps> = ({
@@ -34,6 +35,7 @@ const FlippableCards: React.FC<FlippableCardsProps> = ({
   expandedHeightClass = 'h-80',
   onFlip,
   onDelete,
+  onOpenMindmap,
 }) => {
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -103,20 +105,20 @@ const FlippableCards: React.FC<FlippableCardsProps> = ({
                 )}
               </button>
 
-              {/* Delete button */}
-              {onDelete && (
+              {/* Mindmap button */}
+              {onOpenMindmap && (
                 <button
                   type="button"
-                  aria-label="Delete insight"
-                  title="Delete insight"
+                  aria-label="Open mindmap"
+                  title="Open mindmap"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(item.id);
+                    onOpenMindmap(item.id);
                   }}
                   onKeyDown={(e) => e.stopPropagation()}
-                  className="absolute right-12 top-2 z-10 px-2 py-1 rounded-md border bg-white/80 hover:bg-red-50 shadow-sm hover:border-red-200"
+                  className="absolute right-2 top-10 z-10 px-2 py-1 rounded-md border bg-white/80 hover:bg-purple-50 shadow-sm hover:border-purple-200"
                 >
-                  <X size={14} className="text-gray-600 hover:text-red-600" />
+                  <BrainCircuit size={14} className="text-gray-600 hover:text-purple-600" />
                 </button>
               )}
 
