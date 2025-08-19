@@ -865,7 +865,7 @@ Write a narrated script with:
 
 Output format (plain text):
 Title: <compelling title>
-{host}: <narration paragraphs; each line or short paragraph prefixed once with the host name is fine>
+<narration paragraphs; Dont add the word 'Host'>
 """
 
         script = await call_gemini_api(

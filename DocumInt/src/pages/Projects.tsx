@@ -5,6 +5,7 @@ import NewProjectForm from '../components/NewProjectForm';
 import { Book, Trash2 } from 'lucide-react';
 import { listProjects, loadProject, deleteProject } from '../utils/projectStorage';
 import type { ProjectMetadata } from '../utils/projectStorage';
+import logo from '../assets/logo.png'
 
 const Projects = () => {
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
@@ -96,7 +97,7 @@ const Projects = () => {
      {!showNewProjectForm && (
        <div className="fixed top-1/10 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
          <img
-           src="logo.png"
+           src={logo}
            alt="DocumInt logo"
            className="h-40 md:h-40 object-contain"
          />

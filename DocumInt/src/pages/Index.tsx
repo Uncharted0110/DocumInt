@@ -4,6 +4,7 @@ import ScrollLayer from '../components/ScrollLayer';
 import BackgroundLayout from '../components/background/BackgroundLayout';
 import NewProjectForm from '../components/NewProjectForm';
 import { Lightbulb, Podcast, Route, BrainCircuit, ChevronDown } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -45,7 +46,7 @@ const Index = () => {
               // First layer: ignore pointer events so clicks pass through if needed
               <div className="relative h-screen w-full flex flex-col items-center justify-center text-center bg-transparent pointer-events-none">
                 <img
-                  src="logo.png"
+                  src={logo}
                   alt="DocumInt logo"
                   className="w-100 h-100 mx-auto object-contain"
                 />

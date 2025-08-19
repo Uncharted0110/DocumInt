@@ -41,6 +41,7 @@
 - **MindMap**: Visualizes all the relavant sections along with the corressponding text in the PDFs.
 - **No Model Usage**: All relevant source search is done by our in-house engine and does not use AI models, which enhances speed by 5 times, and gives condiserable accuracy in search results.
 - **Option to Add PDFs**: New PDFs can be added to the DocumInt(Project) on the fly.
+- **Cachings**: Implemented caching for embeddings, podcasts, insights, mindmaps for faster retrieval.
 
 > [!WARNING]
 > Wait until the embeddings load, it might take 5 to 10 seconds, before you will be able to interact with the PDFs, take a look at the backend logs for a more detailed picture.
