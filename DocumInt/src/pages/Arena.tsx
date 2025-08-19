@@ -9,6 +9,8 @@ import PDFListSidebar from '../components/PDFListSidebar';
 import PDFOutlineSidebar from '../components/PDFOutlineSidebar';
 import MindMap from '../components/Mindmap';
 import Insights from '../components/Insights';
+import { generateUUID } from '../utils/uuid';
+import { API_ENDPOINTS } from '../config/api';
 import SelectionBulb from '../components/SelectionBulb';
 import { saveProjectState } from '../utils/projectStorage';
 
@@ -49,7 +51,7 @@ const Arena = () => {
     // Chat state - simplified interface
     const [chatMessage, ] = useState('');
     const [chatHistory, setChatHistory] = useState<{ id: string; type: "bot" | "user"; message: string; timestamp: Date; results?: any[] }[]>([
-        { id: crypto.randomUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them!', timestamp: new Date() }
+        { id: generateUUID(), type: 'bot', message: 'Hello! Upload PDFs to get started, then I can help you analyze them!', timestamp: new Date() }
     ]);
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -451,7 +453,7 @@ const Arena = () => {
         
         // Clear chat history and show only the current search
         const botMessage = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             type: 'bot' as const,
             message: `Selected text: "${selectedText}"\n\nSearching for relevant sources...`,
             timestamp: new Date()
@@ -462,7 +464,7 @@ const Arena = () => {
         const cacheKey = sessionStorage.getItem('cache_key');
         if (!cacheKey) {
             const errorMessage = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 type: 'bot' as const,
                 message: 'PDFs not cached yet. Please upload PDFs first.',
                 timestamp: new Date()
@@ -477,7 +479,7 @@ const Arena = () => {
             formData.append('task', selectedText);
             formData.append('k', '5');
 
-            const response = await fetch('http://localhost:8000/query-pdfs', {
+            const response = await fetch(API_ENDPOINTS.QUERY_PDFS, {
                 method: 'POST',
                 body: formData,
             });
@@ -485,7 +487,7 @@ const Arena = () => {
             if (response.ok) {
                 const data = await response.json();
                 const resultsMessage = {
-                    id: crypto.randomUUID(),
+                    id: generateUUID(),
                     type: 'bot' as const,
                     message: `Selected text: "${selectedText}"\n\nFound ${data.subsection_analysis.length} relevant sections:`,
                     timestamp: new Date(),
@@ -494,7 +496,7 @@ const Arena = () => {
                 setChatHistory([resultsMessage]); // Replace with results only
             } else {
                 const errorMessage = {
-                    id: crypto.randomUUID(),
+                    id: generateUUID(),
                     type: 'bot' as const,
                     message: 'Sorry, I encountered an error searching for relevant sources.',
                     timestamp: new Date()
@@ -504,7 +506,7 @@ const Arena = () => {
         } catch (error) {
             console.error('Error searching for selected text:', error);
             const errorMessage = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 type: 'bot' as const,
                 message: 'Sorry, I encountered an error searching for relevant sources.',
                 timestamp: new Date()
@@ -534,7 +536,7 @@ const Arena = () => {
                 const formData = new FormData();
                 formData.append('project_name', projectName);
                 formData.append('file', f);
-                const resp = await fetch('http://localhost:8000/append-pdf', { method: 'POST', body: formData });
+                const resp = await fetch(API_ENDPOINTS.APPEND_PDF, { method: 'POST', body: formData });
                 if (!resp.ok) { 
                     console.error('Append failed', await resp.text()); 
                     continue; 
@@ -544,7 +546,7 @@ const Arena = () => {
                 setAppendStatus(`Processing embeddings for ${f.name}…`);
                 // Poll cache status
                 for (let i=0;i<180;i++) { // up to ~90s
-                    const statusResp = await fetch(`http://localhost:8000/cache-status/${key}`);
+                    const statusResp = await fetch(API_ENDPOINTS.CACHE_STATUS(key));
                     if (statusResp.ok) {
                         const sData = await statusResp.json();
                         if (sData.ready) break;

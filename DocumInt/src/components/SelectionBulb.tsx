@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Lightbulb  } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
+import { API_ENDPOINTS } from '../config/api';
 
 interface SelectionBulbProps {
   apis: any; // Adobe loaded state or APIs
@@ -145,7 +146,7 @@ const SelectionBulb: React.FC<SelectionBulbProps> = ({ apis, onGenerateInsight, 
       formData.append('k', '6');
       formData.append('max_chunks_to_analyze', '3');
       formData.append('analysis_prompt', 'Analyze and extract key insights, facts, relationships and concise summary relevant strictly to the selected text context.');
-      const res = await fetch('http://localhost:8000/analyze-chunks-with-gemini', { method: 'POST', body: formData });
+      const res = await fetch(API_ENDPOINTS.ANALYZE_CHUNKS, { method: 'POST', body: formData });
       if (!res.ok) throw new Error(await res.text());
       const analysis = await res.json();
       window.dispatchEvent(new CustomEvent('documint:newInsightAnalysis', { detail: { selectedText, analysis } }));

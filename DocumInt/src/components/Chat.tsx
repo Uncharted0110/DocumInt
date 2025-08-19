@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cable, X } from 'lucide-react';
+import { X, Cable } from 'lucide-react';
+import { API_ENDPOINTS } from '../config/api';
 
 interface ChatMessage {
   id: string;
@@ -74,7 +75,7 @@ const Chat: React.FC<ChatProps> = ({
       if (projectName) formData.append('project_name', projectName);
       pdfFiles.forEach((file) => { formData.append('files', file); });
       console.log('[Chat] Calling /cache-pdfs with', pdfFiles.length, 'files for project', projectName);
-      const response = await fetch('http://localhost:8000/cache-pdfs', { method: 'POST', body: formData });
+      const response = await fetch(API_ENDPOINTS.CACHE_PDFS, { method: 'POST', body: formData });
       if (response.ok) {
         const data = await response.json();
         setCacheKey(data.cache_key);
@@ -107,7 +108,7 @@ const Chat: React.FC<ChatProps> = ({
 
   const checkCacheStatus = async (key: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/cache-status/${key}`);
+      const response = await fetch(API_ENDPOINTS.CACHE_STATUS(key));
       if (response.ok) {
         const data = await response.json();
         return data.ready;

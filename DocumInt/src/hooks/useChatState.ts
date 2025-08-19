@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { generateUUID } from '../utils/uuid';
 
 interface ChatMessage {
   id: string;
@@ -23,7 +24,7 @@ interface QueryResult {
 export const useChatState = () => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
     {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: 'bot',
       message: 'Hello! Upload PDFs to get started, then I can help you analyze them with persona-based search!',
       timestamp: new Date()
@@ -33,7 +34,7 @@ export const useChatState = () => {
   const addMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = {
       ...message,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       timestamp: new Date()
     };
     setChatHistory(prev => [...prev, newMessage]);
@@ -66,7 +67,7 @@ export const useChatState = () => {
   const clearChat = useCallback(() => {
     setChatHistory([
       {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         type: 'bot',
         message: 'Hello! Upload PDFs to get started, then I can help you analyze them with persona-based search!',
         timestamp: new Date()

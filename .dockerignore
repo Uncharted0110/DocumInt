@@ -1,2 +1,59 @@
-/DocumInt/node_modules
-/DocumInt/dist
+# Node modules and build artifacts
+**/node_modules/
+**/dist/
+**/build/
+
+# Python cache and virtual environments  
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+**/venv/
+**/env/
+**/.venv/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+**/*.log
+**/logs/
+
+# Environment files (will be set at runtime)
+**/.env
+**/.env.local
+**/.env.development
+**/.env.test
+**/.env.production
+
+# Documentation
+**/README.md
+**/docs/
+
+# Testing
+**/test/
+**/tests/
+**/.coverage
+**/coverage/
+
+# Temporary files
+**/tmp/
+**/temp/

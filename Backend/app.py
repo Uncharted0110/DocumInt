@@ -31,6 +31,20 @@ load_dotenv()
 
 app = FastAPI()
 
+# --- Frontend (SPA) static serving integration ---
+from fastapi.staticfiles import StaticFiles
+
+FRONTEND_DIR = Path(os.environ.get("DOCUMINT_FRONTEND_DIST", "/app/web/dist")).resolve()
+ASSETS_SUBDIR = FRONTEND_DIR / "assets"
+
+if ASSETS_SUBDIR.exists():
+    # Serve versioned asset files (JS/CSS/images)
+    app.mount("/assets", StaticFiles(directory=ASSETS_SUBDIR), name="assets")
+
+# Serve static files from the dist root (for public folder assets)
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -134,7 +148,7 @@ def detect_domain(persona: str, task: str) -> str:
             return domain
     return 'general'
 
-@app.get("/")
+@app.get("/api/")
 async def root():
     return {"message": "DocumInt Backend API"}
 
@@ -1184,6 +1198,32 @@ async def delete_project_insight(project_name: str, insight_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting insight: {e}")
 
+# Frontend routes - serve index.html for client-side routing
+@app.get("/projects")
+@app.get("/arena") 
+@app.get("/mindmap")
+async def frontend_routes():
+    """Serve index.html for frontend routes to enable client-side routing"""
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="Frontend not built")
+
+@app.get("/{full_path:path}")
+async def spa_catch_all(full_path: str):
+    """Return index.html for any unmatched path (enables client-side routing).
+    This executes AFTER all explicit API routes; only unknown paths fall through.
+    """
+    # Skip API routes and static assets
+    if full_path.startswith(("api/", "assets/", "static/")):
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Serve index.html for all other paths (client-side routing)
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="Frontend not built")
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

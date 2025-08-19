@@ -1,12 +1,19 @@
-# Multi-stage build: build frontend, install backend, serve with Uvicorn
+# Multi-stage build: build frontend, install backend, serve with integrated FastAPI
 
 # ---------- Frontend build ----------
 FROM node:20-alpine AS webbuilder
 WORKDIR /app/web
+# Build-time args for Vite (must be supplied at docker build time to be embedded in bundle)
+ARG VITE_ADOBE_API_KEY
+ARG VITE_GEMINI_API_KEY
+# Expose them as env so "npm run build" sees them
+ENV VITE_ADOBE_API_KEY=$VITE_ADOBE_API_KEY \
+    VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 COPY DocumInt/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY DocumInt/ ./
-RUN npm run build
+# (Optional) quick sanity output so logs show whether a client id was supplied
+RUN echo "Building with VITE_ADOBE_API_KEY=${VITE_ADOBE_API_KEY}" && npm run build
 
 # ---------- Backend runtime ----------
 FROM python:3.11-slim AS runtime
@@ -15,7 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # System deps (for building some wheels if needed)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl ca-certificates && \
+    ca-certificates curl build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -25,7 +32,7 @@ COPY Backend/ /app/backend/
 # Copy the built frontend from previous stage
 COPY --from=webbuilder /app/web/dist /app/web/dist
 
-# Install backend dependencies (only from Backend)
+# Install backend dependencies
 COPY Backend/requirements.txt /tmp/requirements.txt
 # Install PyTorch CPU-only version first for lighter build, then remaining dependencies
 RUN pip install --no-cache-dir torch==2.3.1+cpu torchvision==0.18.1+cpu torchaudio==2.3.1+cpu \
@@ -33,25 +40,25 @@ RUN pip install --no-cache-dir torch==2.3.1+cpu torchvision==0.18.1+cpu torchaud
     grep -v "^torch" /tmp/requirements.txt > /tmp/requirements_no_torch.txt && \
     pip install --no-cache-dir -r /tmp/requirements_no_torch.txt
 
-# Expose envs (documented)
-# Set non-sensitive environment variables; sensitive ones must be provided at runtime
+# Set environment variables
+# Frontend configuration
 ENV DOCUMINT_FRONTEND_DIST=/app/web/dist \
-    VITE_ADOBE_API_KEY="" \
+    DOCUMINT_DATA_DIR=/app/data/projects
+
+# NOTE: VITE_* variables are compile-time only (already baked into static JS). Setting them here will NOT change the frontend bundle.
+# Runtime-only API keys (server side usage) can still be provided at `docker run -e` time if backend code needs them.
+ENV SPEECH_API_KEY="" \
+    SPEECH_REGION="" \
     LLM_PROVIDER=gemini \
-    VITE_GEMINI_API_KEY="" \
     GEMINI_MODEL=gemini-2.5-flash \
     TTS_PROVIDER=azure \
-    SPEECH_API_KEY="" \
-    SPEECH_REGION=""
+    PYTHONPATH=/app/backend:/app/backend/src
 
-# Copy ASGI server that mounts frontend + backend
-COPY Backend/app.py /app/backend/server.py
-
-# Make sure PYTHONPATH includes backend and its src
-ENV PYTHONPATH=/app/backend:/app/backend/src
+# Create data directory for persistence
+RUN mkdir -p /app/data/projects
 
 # Port
 EXPOSE 8080
 
-# Start using uvicorn on 0.0.0.0:8080
-CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080", "--app-dir", "/app/backend"]
+# Start the integrated FastAPI server that serves both frontend and backend
+CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--app-dir", "/app/backend"]

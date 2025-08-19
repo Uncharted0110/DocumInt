@@ -4,6 +4,8 @@ import FlippableCards, { type FlippableCardItem } from './FlippableCards';
 import { updateProjectInsights, type ProjectInsightPersist } from '../utils/projectStorage';
 import { useMindmap } from '../contexts/MindmapContext';
 import ReactMarkdown from 'react-markdown';
+import { generateUUID } from '../utils/uuid';
+import { API_ENDPOINTS } from '../config/api';
 
 interface GeminiAnalysisResp { metadata?: any; retrieval_results?: any[]; gemini_analysis?: any[]; summary?: { top_insights?: string[] }; selected_text?: string; insight_id?: string; }
 interface InsightsProps {
@@ -27,7 +29,7 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
     (async () => {
       if (!projectName) return;
       try {
-        const response = await fetch(`http://localhost:8000/projects/${projectName}/insights`);
+        const response = await fetch(API_ENDPOINTS.PROJECT_INSIGHTS(projectName));
         if (!response.ok) {
           console.warn('Failed to load insights from server');
           return;
@@ -43,10 +45,10 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
             accentColor: palette[i % palette.length],
             frontExpandedContent: <div className="text-sm text-gray-600">Loading insight...</div>,
             backContent: insight.has_audio ? 
-              audioEl(`http://localhost:8000/insight-audio/${projectName}/${insight.insight_id}.mp3`, insight.script) :
+              audioEl(API_ENDPOINTS.INSIGHT_AUDIO(projectName, insight.insight_id), insight.script) :
               <div className="text-xs text-gray-500">Flip to generate podcast.</div>,
             backExpandedContent: insight.has_audio ?
-              audioEl(`http://localhost:8000/insight-audio/${projectName}/${insight.insight_id}.mp3`, insight.script) :
+              audioEl(API_ENDPOINTS.INSIGHT_AUDIO(projectName, insight.insight_id), insight.script) :
               <div className="text-sm text-gray-500">Flip to generate podcast.</div>
           }));
           
@@ -59,7 +61,7 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
           
           for (const insight of serverInsights) {
             try {
-              const analysisResponse = await fetch(`http://localhost:8000/projects/${projectName}/insights/${insight.insight_id}`);
+              const analysisResponse = await fetch(API_ENDPOINTS.PROJECT_INSIGHT(projectName, insight.insight_id));
               if (analysisResponse.ok) {
                 const fullAnalysis = await analysisResponse.json();
                 analyses[insight.insight_id] = fullAnalysis;
@@ -219,7 +221,7 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
       if (!detail) return;
       const { selectedText, analysis } = detail;
       const accent = palette[counterRef.current % palette.length];
-      const id = analysis.insight_id || crypto.randomUUID();
+      const id = analysis.insight_id || generateUUID();
       counterRef.current += 1;
       const newItem: FlippableCardItem = {
         id,
@@ -246,10 +248,10 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
     setPodcastStatus(p => ({ ...p, [id]: { state: 'loading' } }));
     setItems(prev => prev.map(it => it.id===id ? { ...it, backContent: <div className="text-xs text-gray-600 flex items-center gap-2"><Loader2 size={12} className="animate-spin"/>Generating podcast…</div>, backExpandedContent: <div className="text-sm text-gray-600">Generating podcast…</div> } : it));
     try {
-      const resp = await fetch('http://localhost:8000/generate-podcast', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ project_name: analysis.metadata?.project_name || projectName, insight_id: analysis.insight_id }) });
+      const resp = await fetch(API_ENDPOINTS.GENERATE_PODCAST, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ project_name: analysis.metadata?.project_name || projectName, insight_id: analysis.insight_id }) });
       if (!resp.ok) throw new Error(await resp.text());
       const data = await resp.json();
-      const audioUrl = `http://localhost:8000${data.audio_url}`;
+      const audioUrl = data.audio_url ? `http://localhost:8080${data.audio_url}` : '';
       const transcript = data.script || '';
       setItems(prev => prev.map(it => it.id===id ? { ...it, backContent: audioEl(audioUrl, transcript), backExpandedContent: audioEl(audioUrl, transcript) } : it));
       setPodcastStatus(p => ({ ...p, [id]: { state: 'ready', audioUrl, transcript } }));

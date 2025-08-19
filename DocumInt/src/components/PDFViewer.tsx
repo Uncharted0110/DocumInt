@@ -28,6 +28,14 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const pdfViewerRef = useRef<HTMLDivElement>(null);
   const lastNavigationPageRef = useRef<number | undefined>(undefined);
 
+  // Centralize client id retrieval + diagnostics
+  const ADOBE_CLIENT_ID = import.meta.env.VITE_ADOBE_API_KEY as string | undefined;
+  if (!(window as any).__ADOBE_CLIENT_ID_LOGGED__) {
+    (window as any).__ADOBE_CLIENT_ID_LOGGED__ = true;
+    // This log helps verify whether the value was embedded at build time
+    console.log('[PDFViewer] Adobe Client ID (truncated):', ADOBE_CLIENT_ID ? ADOBE_CLIENT_ID.slice(0, 6) + '…' : 'undefined');
+  }
+
   // Use the custom navigation hook; provide a docVersion so internal state resets when pdfUrl changes
   const { navigateToPage } = useAdobePDFNavigation({
     view,
@@ -91,6 +99,13 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
   const initializePDFViewer = () => {
     if (!window.AdobeDC || !pdfViewerRef.current) return;
 
+    if (!ADOBE_CLIENT_ID) {
+      console.error('[PDFViewer] Missing VITE_ADOBE_API_KEY at runtime. It must be provided as a build arg (Vite bake-in).');
+      // Provide a lightweight UI notice instead of throwing
+      pdfViewerRef.current.innerHTML = '<div style="padding:16px;font:14px system-ui;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;">Adobe Client ID missing (env VITE_ADOBE_API_KEY not baked). Rebuild image with --build-arg VITE_ADOBE_API_KEY=YOUR_ID</div>';
+      return;
+    }
+
     console.log('Initializing Adobe PDF Viewer...');
 
     if (view) {
@@ -99,7 +114,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     }
 
     const adobeDCView = new window.AdobeDC.View({
-      clientId: import.meta.env.VITE_ADOBE_API_KEY,
+      clientId: ADOBE_CLIENT_ID,
       divId: "adobe-dc-view"
     });
 

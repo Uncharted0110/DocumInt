@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, FileText, Hash, Book, Star } from 'lucide-react';
+import { API_ENDPOINTS } from '../config/api';
 
 interface OutlineItem {
   level: "H1" | "H2" | "H3";
@@ -85,7 +86,7 @@ const PDFOutlineSidebar: React.FC<PDFOutlineSidebarProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8000/extract-outline', {
+      const response = await fetch(API_ENDPOINTS.EXTRACT_OUTLINE, {
         method: 'POST',
         body: formData,
       });
