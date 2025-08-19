@@ -243,3 +243,14 @@ flowchart TD
     L_K_O_0@{ animation: fast } 
     L_L_P_0@{ animation: fast } 
 ```
+
+## Docker Commands
+
+- Docker build:
+   ```console
+   docker build --no-cache --build-arg VITE_ADOBE_API_KEY=YOUR_ADOBE_API_KEY --build-arg VITE_GEMINI_API_KEY=YOUR_GEMINI_KEY -t documint .
+   ```
+- Docker run:
+   ```console
+   docker run --name documint -p 8080:8080 -e SPEECH_API_KEY="AZURE_TTS_KEY" -e SPEECH_REGION=eastus -e GEMINI_MODEL=gemini-2.5-flash -e VITE_ADOBE_API_KEY="YOUR_ADOBE_API_KEY" -e VITE_GEMINI_API_KEY="YOUR_GEMINI_KEY" documint:latest
+   ```
