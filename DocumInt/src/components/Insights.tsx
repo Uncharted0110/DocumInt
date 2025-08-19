@@ -3,6 +3,7 @@ import { Loader2, Sparkles } from 'lucide-react';
 import FlippableCards, { type FlippableCardItem } from './FlippableCards';
 import { updateProjectInsights, type ProjectInsightPersist } from '../utils/projectStorage';
 import { useMindmap } from '../contexts/MindmapContext';
+import ReactMarkdown from 'react-markdown';
 
 interface GeminiAnalysisResp { metadata?: any; retrieval_results?: any[]; gemini_analysis?: any[]; summary?: { top_insights?: string[] }; selected_text?: string; insight_id?: string; }
 interface InsightsProps {
@@ -165,7 +166,18 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-indigo-700 font-semibold text-sm"><Sparkles size={14}/> Generated Insight</div>
-        {top.length>0 && <div><div className="text-xs font-semibold text-gray-700 mb-1">Top Points</div><ul className="list-disc ml-4 text-xs space-y-1">{top.map(t=> <li key={t.slice(0,50)}>{t}</li>)}</ul></div>}
+        {top.length>0 && (
+          <div>
+            <div className="text-xs font-semibold text-gray-700 mb-1">Top Points</div>
+            <div className="space-y-1">
+              {top.map(t=> (
+                <div key={t.slice(0,50)} className="prose prose-xs prose-slate max-w-none [&>*]:my-1 [&>h1]:text-xs [&>h2]:text-xs [&>h3]:text-xs [&>p]:text-xs [&>li]:text-xs">
+                  <ReactMarkdown>{t}</ReactMarkdown>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {retrieval.length>0 && (
           <div>
             <div className="text-xs font-semibold text-gray-700 mb-1">Sources</div>
@@ -205,7 +217,9 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
               return (
                 <div key={key} className="border rounded p-2 bg-gray-50">
                   <div className="text-[11px] text-gray-500 mb-1">{d.document} • {d.section_title} (p.{d.page_number})</div>
-                  <div className="text-xs whitespace-pre-wrap leading-snug">{(d.gemini_analysis||'').slice(0,800)}</div>
+                  <div className="prose prose-xs prose-slate max-w-none [&>*]:my-1 [&>h1]:text-xs [&>h2]:text-xs [&>h3]:text-xs [&>p]:text-xs [&>li]:text-xs [&>strong]:font-semibold">
+                    <ReactMarkdown>{(d.gemini_analysis||'').slice(0,800)}</ReactMarkdown>
+                  </div>
                 </div>
               );
             })}
@@ -297,8 +311,8 @@ const Insights: React.FC<InsightsProps> = ({ projectName, onNavigateToPage, onNa
           <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
             📝 Podcast Script
           </div>
-          <div className="text-xs text-gray-700 leading-relaxed max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] bg-white p-2 rounded border">
-            {transcript}
+          <div className="text-xs text-gray-700 leading-relaxed max-h-40 overflow-y-auto bg-white p-2 rounded border prose prose-xs prose-slate max-w-none [&>*]:my-1 [&>h1]:text-xs [&>h2]:text-xs [&>h3]:text-xs [&>p]:text-xs [&>li]:text-xs [&>strong]:font-semibold">
+            <ReactMarkdown>{transcript}</ReactMarkdown>
           </div>
         </div>
       )}
