@@ -28,7 +28,7 @@ COPY --from=webbuilder /app/web/dist /app/web/dist
 # Install backend dependencies (only from Backend)
 COPY Backend/requirements.txt /tmp/requirements.txt
 # Install PyTorch CPU-only version first for lighter build, then remaining dependencies
-RUN pip install --no-cache-dir torch==2.0.1+cpu torchvision==0.15.2+cpu torchaudio==2.0.2+cpu \
+RUN pip install --no-cache-dir torch==2.3.1+cpu torchvision>=0.15.2+cpu torchaudio==2.0.2+cpu \
     --index-url https://download.pytorch.org/whl/cpu && \
     grep -v "^torch" /tmp/requirements.txt > /tmp/requirements_no_torch.txt && \
     pip install --no-cache-dir -r /tmp/requirements_no_torch.txt
