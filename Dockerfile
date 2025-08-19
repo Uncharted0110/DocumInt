@@ -45,7 +45,7 @@ ENV DOCUMINT_FRONTEND_DIST=/app/web/dist \
     AZURE_TTS_ENDPOINT=""
 
 # Copy ASGI server that mounts frontend + backend
-COPY Backend/server.py /app/backend/server.py
+COPY Backend/app.py /app/backend/server.py
 
 # Make sure PYTHONPATH includes backend and its src
 ENV PYTHONPATH=/app/backend:/app/backend/src

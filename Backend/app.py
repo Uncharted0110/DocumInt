@@ -649,9 +649,7 @@ AGGREGATED SECTIONS END
                 # Prepare summary top insights cleanly
                 summary_top_insights: list[str] = []
                 if isinstance(gemini_text, str):
-                    truncated = gemini_text[:400]
-                    if len(gemini_text) > 400:
-                        truncated += "..."
+                    truncated = gemini_text
                     summary_top_insights = [truncated]
                 await f.write(json.dumps({
                     "metadata": {
@@ -688,9 +686,7 @@ AGGREGATED SECTIONS END
         # Prepare response summary insights
         response_top_insights: list[str] = []
         if isinstance(gemini_text, str):
-            truncated_resp = gemini_text[:400]
-            if len(gemini_text) > 400:
-                truncated_resp += "..."
+            truncated_resp = gemini_text
             response_top_insights = [truncated_resp]
 
         return {
