@@ -92,7 +92,7 @@ DocumInt/
 - **Azure Speech (TTS)** → `SPEECH_API_KEY`, `SPEECH_REGION`  
 Please use the above mentioned name for the API keys, else VITE does not recognise the keys.
 We have used Azure Speech Service API for this application, so please do use the same API key for testing. (<a href="https://ai.azure.com/explore/models/aiservices/Azure-AI-Speech/version/1/registry/azureml-cogsvc/tryout#realtime">Click here to access the API page</a>).
-
+ The following key value can be used for `VITE_ADOBE_API_KEY` - `bfbd762c12ab4b4ab4922229a5017f38`
 ---
 
 ## 🚀 Execution
